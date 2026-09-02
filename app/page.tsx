@@ -597,7 +597,7 @@ export default function Home() {
                     </Pie>
                     <Tooltip
                       contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: '#f0efe8' }}
-                      formatter={(v: number, n: string) => [money(v as number), n]}
+                      formatter={(value: any, name: any) => [money(value as number), name as string]}
                     />
                     <Legend
                       verticalAlign="bottom"
@@ -642,8 +642,8 @@ export default function Home() {
                   <Tooltip
                     cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                     contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: '#f0efe8' }}
-                    formatter={(v: number) => [money(v as number), 'Spent']}
-                    labelFormatter={(l: string) => `Day ${l} · ${activeMonth}-${String(l).padStart(2, '0')}`}
+                    formatter={(value: any) => [money(value as number), 'Spent']}
+                    labelFormatter={(l: any) => `Day ${l} · ${activeMonth}-${String(l).padStart(2, '0')}`}
                   />
                   <Bar dataKey="amount" radius={[8, 8, 8, 8]}>
                     {dailySpendData.map((d, i) => (
@@ -681,7 +681,7 @@ export default function Home() {
                   <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `₹${(v / 1000).toFixed(0)}k`} width={52} />
                   <Tooltip
                     contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: '#f0efe8' }}
-                    formatter={(v: number, n: string) => [money(v as number), n === 'spent' ? 'Spent' : 'Budget']}
+                    formatter={(value: any, name: any) => [money(value as number), (name as string) === 'spent' ? 'Spent' : 'Budget']}
                   />
                   <Area type="monotone" dataKey="budget" stroke="rgba(255,255,255,0.28)" strokeDasharray="6 6" strokeWidth={1.6} dot={false} fill="transparent" />
                   <Area type="monotone" dataKey="spent" stroke="#c9ff4a" strokeWidth={2.6} dot={false} fill="url(#gradSpent)" />
@@ -716,7 +716,7 @@ export default function Home() {
                     <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `₹${(v / 1000).toFixed(0)}k`} width={52} />
                     <Tooltip
                       contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: '#f0efe8' }}
-                      formatter={(v: number, n: string) => [money(v as number), n === 'spent' ? 'Spent' : n === 'salary' ? 'Salary' : 'Saved']}
+                      formatter={(value: any, name: any) => [money(value as number), (name as string) === 'spent' ? 'Spent' : (name as string) === 'salary' ? 'Salary' : 'Saved']}
                     />
                     <Legend wrapperStyle={{ fontSize: '0.78rem', color: '#a8a7a0', paddingTop: 8 }} iconType="circle" />
                     <Bar dataKey="salary" name="Salary" fill="rgba(255,255,255,0.09)" stroke="rgba(255,255,255,0.14)" radius={[8, 8, 8, 8]} />
