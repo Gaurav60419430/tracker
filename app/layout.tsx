@@ -14,17 +14,17 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://moneta-monthly.gaurav-gupta-6041.chatgpt.site'),
-  title: 'Moneta — Monthly Expense Tracker',
-  description: 'A private, intelligent monthly expense tracker for salary, spending, budgets, and savings.',
+  title: 'Nivara - Monthly Expense Tracker',
+  description: 'Know where it goes. Track salary, expenses, pace, and savings in one private dashboard.',
   openGraph: {
-    title: 'Moneta — Monthly Expense Tracker',
-    description: 'Money, under control. Track salary, spending, budgets, and savings in one private dashboard.',
-    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'Moneta — Money, under control.' }],
+    title: 'Nivara - Monthly Expense Tracker',
+    description: 'Know where it goes. Track salary, expenses, pace, and savings in one private dashboard.',
+    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'Nivara monthly expense tracker' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Moneta — Monthly Expense Tracker',
-    description: 'Money, under control. Track salary, spending, budgets, and savings in one private dashboard.',
+    title: 'Nivara - Monthly Expense Tracker',
+    description: 'Know where it goes. Track salary, expenses, pace, and savings in one private dashboard.',
     images: ['/og.png'],
   },
 };
