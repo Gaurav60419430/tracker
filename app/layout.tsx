@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://moneta-monthly.gaurav-gupta-6041.chatgpt.site'),
   title: 'Moneta — Monthly Expense Tracker',
   description: 'A private, intelligent monthly expense tracker for salary, spending, budgets, and savings.',
   openGraph: {

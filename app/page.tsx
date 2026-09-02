@@ -14,8 +14,8 @@ type ModelContext = { registerTool: (tool: Record<string, unknown>, options?: { 
 const categories = ['Food', 'Transport', 'Housing', 'Shopping', 'Subscriptions', 'Health', 'Fun', 'Other'];
 const categoryColors: Record<string, string> = { Food: '#ffab67', Transport: '#66e1db', Housing: '#a889ff', Shopping: '#ff769a', Subscriptions: '#7f9dff', Health: '#6de08b', Fun: '#ffd65b', Other: '#9a98a5' };
 const STORAGE_KEY = 'moneta-ledger-v1';
-const now = new Date();
-const initialMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+const bootstrapToday = '2026-09-03';
+const initialMonth = bootstrapToday.slice(0, 7);
 const demoTransactions: Transaction[] = [
   { id: 'demo-1', name: 'Rent', category: 'Housing', amount: 16000, date: '2026-09-01' },
   { id: 'demo-2', name: 'The Coffee Atlas', category: 'Food', amount: 420, date: '2026-09-02' },
@@ -35,19 +35,32 @@ const shiftMonth = (key: string, delta: number) => { const date = new Date(`${ke
 export default function Home() {
   const [ledger, setLedger] = useState<Ledger>({ [initialMonth]: { salary: 80000, budget: 50000, savingsGoal: 32400, transactions: initialMonth === '2026-09' ? demoTransactions : [] } });
   const [activeMonth, setActiveMonth] = useState(initialMonth);
+  const [todayKey, setTodayKey] = useState(bootstrapToday);
   const [hydrated, setHydrated] = useState(false);
   const [editingSalary, setEditingSalary] = useState(false);
   const [salaryDraft, setSalaryDraft] = useState('');
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Food');
-  const [date, setDate] = useState(`${initialMonth}-${String(Math.min(now.getDate(), 28)).padStart(2, '0')}`);
+  const [date, setDate] = useState(bootstrapToday);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [toast, setToast] = useState('');
   const nameRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) setLedger(JSON.parse(saved) as Ledger); } catch { /* Keep safe starter data. */ } setHydrated(true); }, []);
+  useEffect(() => {
+    const localToday = new Date();
+    const localKey = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, '0')}-${String(localToday.getDate()).padStart(2, '0')}`;
+    const localMonth = localKey.slice(0, 7);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) setLedger(JSON.parse(saved) as Ledger);
+      else if (localMonth !== initialMonth) setLedger((current) => ({ ...current, [localMonth]: emptyMonth() }));
+    } catch { /* Keep safe starter data. */ }
+    setTodayKey(localKey);
+    setActiveMonth(localMonth);
+    setHydrated(true);
+  }, []);
   useEffect(() => { if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger)); }, [ledger, hydrated]);
   useEffect(() => { setDate(`${activeMonth}-01`); setEditingSalary(false); }, [activeMonth]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); nameRef.current?.focus(); } if (event.key === 'Escape') setEditingSalary(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, []);
@@ -57,7 +70,7 @@ export default function Home() {
   const balance = month.salary - spent;
   const savingsRate = month.salary > 0 ? Math.max(0, (balance / month.salary) * 100) : 0;
   const daysInMonth = new Date(Number(activeMonth.slice(0, 4)), Number(activeMonth.slice(5, 7)), 0).getDate();
-  const elapsed = activeMonth === initialMonth ? Math.max(1, now.getDate()) : daysInMonth;
+  const elapsed = activeMonth === todayKey.slice(0, 7) ? Math.max(1, Number(todayKey.slice(-2))) : daysInMonth;
   const dailyBurn = spent / elapsed;
   const projectedSpend = dailyBurn * daysInMonth;
   const projectedSavings = month.salary - projectedSpend;
