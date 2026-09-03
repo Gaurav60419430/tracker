@@ -11,7 +11,7 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') || '/';
-  const [userId, setUserId] = useState('Gaurav');
+  const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -62,12 +62,12 @@ function LoginForm() {
 
           <div className="login-hero">
             <h1>
-              Welcome back,
+              Welcome back
               <br />
-              <em>Gaurav.</em>
+              <em>to Money Tees.</em>
             </h1>
             <p>
-              Your private ledger — salary, burn, velocity and the next right move. Secured on-device, backed to DB for years.
+              Your private ledger — salary, burn, velocity and the next right move. Secured and private.
             </p>
             <div className="login-stats">
               <span>
@@ -101,14 +101,14 @@ function LoginForm() {
                 <LogIn style={{ width: '0.9rem', height: '0.9rem' }} /> Secure access
               </div>
               <h2>Sign in to Money Tees</h2>
-              <p>User ID and password you set — demo prefilled.</p>
+              <p>Enter your credentials to continue.</p>
             </div>
 
             <label>
               <span>User ID</span>
               <div className="login-field">
                 <User />
-                <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="Gaurav" autoComplete="username" autoFocus />
+                <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="Enter user ID" autoComplete="username" autoFocus />
               </div>
             </label>
 
@@ -120,7 +120,7 @@ function LoginForm() {
                   type={show ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="6041"
+                  placeholder="Enter password"
                   autoComplete="current-password"
                 />
                 <button type="button" className="login-eye" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide' : 'Show'}>
@@ -135,15 +135,6 @@ function LoginForm() {
               {loading ? 'Signing in…' : 'Enter vault'}
               <ArrowRight />
             </Button>
-
-            <div className="login-hint">
-              Demo: <strong>Gaurav</strong> / <strong>6041</strong> · 30-day stay · HttpOnly cookie <code>mt_session</code>
-            </div>
-
-            <div className="login-foot">
-              <span>Private ledger → DB `ledgers.id=default` for many-year history</span>
-              <span>Franklin PD 1778 · Lime #C9FF4A</span>
-            </div>
           </form>
         </section>
       </div>
