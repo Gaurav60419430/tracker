@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, BarChart3, TrendingUp, CalendarDays, GitCommitVertical, Sigma, Wallet } from 'lucide-react';
+import { ArrowLeft, BarChart3, TrendingUp, CalendarDays, GitCommitVertical, Sigma, Wallet, LogOut, CircleDollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mean, median, stddev, cv, pearson, linearRegression } from '@/lib/analyticsMath';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ScatterChart, Scatter, LineChart, Line } from 'recharts';
@@ -95,6 +95,14 @@ export default function AnalyticsPage() {
       localStorage.setItem(BUDGET_KEY(activeMonth), JSON.stringify(catBudgets));
     } catch {}
   }, [catBudgets, activeMonth, hydrated]);
+
+  useEffect(() => {
+    fetch('/api/auth', { cache: 'no-store' })
+      .then((r) => {
+        if (!r.ok) window.location.href = `/login?next=${encodeURIComponent('/analytics')}`;
+      })
+      .catch(() => {});
+  }, []);
 
   const month = ledger[activeMonth] ?? { salary: 0, budget: 50000, savingsGoal: 20000, transactions: [] as Transaction[] };
   const spent = month.transactions.reduce((a, t) => a + t.amount, 0);
@@ -210,20 +218,43 @@ export default function AnalyticsPage() {
 
   return (
     <main className="site-root" style={{ width: 'min(100% - 2.25rem, 92rem)', margin: '0 auto', padding: '1.2rem 0 3rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.2rem' }}>
-        <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--paper)', textDecoration: 'none', fontWeight: 700, letterSpacing: '0.08em' }}>
-          <ArrowLeft style={{ width: '1rem', height: '1rem' }} /> Back to Money Tees
+      <nav className="nav-shell" aria-label="Primary navigation" style={{ marginBottom: '1.2rem', width: '100%' }}>
+        <Link href="/" className="wordmark" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.6rem', color: 'var(--paper)', textDecoration: 'none', fontWeight: 700, letterSpacing: '0.22em' }}>
+          <CircleDollarSign style={{ width: '1.2rem', height: '1.2rem', color: 'var(--accent)' }} /> MONEY TEES
         </Link>
-        <div className="nav-month">
-          <Button variant="ghost" size="icon-sm" onClick={() => setActiveMonth(shiftMonth(activeMonth, -1))}>
-            <ArrowLeft />
-          </Button>
-          <span>{monthLabel(activeMonth)}</span>
-          <Button variant="ghost" size="icon-sm" onClick={() => setActiveMonth(shiftMonth(activeMonth, 1))}>
-            <ArrowLeft style={{ transform: 'rotate(180deg)' }} />
+        <div className="nav-links">
+          <Link href="/" style={{ color: 'var(--paper-dim)', fontSize: '0.82rem', textDecoration: 'none' }}>
+            Home
+          </Link>
+          <Link href="/analytics" style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
+            Math Lab
+          </Link>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div className="nav-month">
+            <Button variant="ghost" size="icon-sm" onClick={() => setActiveMonth(shiftMonth(activeMonth, -1))}>
+              <ArrowLeft />
+            </Button>
+            <span>{monthLabel(activeMonth)}</span>
+            <Button variant="ghost" size="icon-sm" onClick={() => setActiveMonth(shiftMonth(activeMonth, 1))}>
+              <ArrowLeft style={{ transform: 'rotate(180deg)' }} />
+            </Button>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={async () => {
+              await fetch('/api/auth', { method: 'DELETE' });
+              window.location.href = '/login';
+            }}
+            aria-label="Logout"
+            title="Logout"
+            style={{ color: 'var(--paper-faint)' }}
+          >
+            <LogOut />
           </Button>
         </div>
-      </div>
+      </nav>
 
       <div className="analytics-header" style={{ marginBottom: '1.5rem' }}>
         <div>

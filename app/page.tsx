@@ -14,6 +14,7 @@ import {
   Check,
   CircleDollarSign,
   Download,
+  LogOut,
   LayoutDashboard,
   Pencil,
   PieChart as PieIcon,
@@ -171,6 +172,18 @@ export default function Home() {
       if (syncRef.current) window.clearTimeout(syncRef.current);
     };
   }, [ledger, hydrated]);
+
+  useEffect(() => {
+    // Guard for vinext dev where Next middleware not run — also works on Vercel as fallback
+    fetch('/api/auth', { cache: 'no-store' })
+      .then((r) => {
+        if (!r.ok) {
+          const nxt = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/login?next=${nxt}`;
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -451,6 +464,22 @@ export default function Home() {
             <ArrowRight />
           </Button>
         </div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={async () => {
+            await fetch('/api/auth', { method: 'DELETE' });
+            try {
+              localStorage.removeItem('mt_ok');
+            } catch {}
+            window.location.href = '/login';
+          }}
+          aria-label="Logout"
+          title="Logout Gaurav"
+          style={{ color: 'var(--paper-faint)' }}
+        >
+          <LogOut />
+        </Button>
       </nav>
 
       <header className="attention-section">
