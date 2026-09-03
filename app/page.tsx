@@ -489,17 +489,20 @@ export default function Home() {
             Know what your <em>money</em> is doing.
           </h1>
           <p>Salary in. Expenses logged. The full month becomes legible — pace, pressure and what&apos;s actually safe to spend.</p>
-          <div className="hero-stats">
-            <span className="hero-stat-pill">
-              <Wallet /> {month.transactions.length} expenses
-            </span>
-            <span className="hero-stat-pill">
-              <TrendingUp /> {savingsRate.toFixed(0)}% saved
-            </span>
-            <span className="hero-stat-pill">
-              <Sparkles /> {moneyCompact(balance)} safe
-            </span>
-          </div>
+          <dl className="hero-stats" aria-label="Month snapshot">
+            <div className="hero-stat">
+              <dt>Recorded</dt>
+              <dd>{month.transactions.length} <span>expenses</span></dd>
+            </div>
+            <div className="hero-stat">
+              <dt>Savings rate</dt>
+              <dd>{savingsRate.toFixed(0)}<span>%</span></dd>
+            </div>
+            <div className="hero-stat">
+              <dt>Safe to spend</dt>
+              <dd>{moneyCompact(balance)}</dd>
+            </div>
+          </dl>
           <div className="hero-actions">
             <Button onClick={() => nameRef.current?.focus()}>
               <Plus />
