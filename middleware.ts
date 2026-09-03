@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Money Tees gate — user Gaurav / 6041
+// Money Tees multi-user gate — any signed mt_session token passes middleware;
+// real per-user auth is enforced in /api/ledger + /api/auth via lib/auth verifyToken + DB.
 const COOKIE = 'mt_session';
-const EXPECTED = Buffer.from('Gaurav:6041').toString('base64'); // simple token
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow login, api/auth, static assets, next internals
+  // Allow login, all APIs (each enforces per-user auth + returns 401 JSON), static assets
   if (
     pathname.startsWith('/login') ||
-    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
     pathname.startsWith('/icon-') ||
@@ -25,7 +25,7 @@ export function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(COOKIE)?.value;
-  if (token === EXPECTED) return NextResponse.next();
+  if (token && token.length > 10) return NextResponse.next();
 
   const url = request.nextUrl.clone();
   url.pathname = '/login';

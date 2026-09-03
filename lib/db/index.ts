@@ -11,7 +11,8 @@ let _db: LibSQLDatabase<typeof schema> | null = null;
 function getClient(): Client {
   if (_client) return _client;
 
-  // 1) Turso / remote libSQL (works on Cloudflare Workers via fetch + Vercel Node)
+  // 1) Turso / remote libSQL (FREE tier, works on Cloudflare Workers via fetch + Vercel Node)
+  // Set TURSO_DATABASE_URL=libsql://... + TURSO_AUTH_TOKEN=eyJ... for many-year cross-device persistence.
   const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
   const tursoToken = process.env.TURSO_AUTH_TOKEN?.trim();
 
@@ -28,12 +29,11 @@ function getClient(): Client {
   }
 
   // 3) Local file for dev / fallback (file:./data/money-tees.db) — absolute for Workers/Vite SSR
-  // On Vercel/Workers without TURSO, this is ephemeral — set TURSO_DATABASE_URL for true many-year persistence.
-  // Keep file under ./data which is gitignored except .keep, survives local dev for years.
+  // Ephemeral on Vercel/Workers without TURSO — set TURSO_* for true many-year persistence.
   let fileUrl = process.env.DATABASE_FILE_URL ?? 'file:./data/money-tees.db';
   if (fileUrl.startsWith('file:')) {
     try {
-      let p = fileUrl.slice(5); // strip file:
+      let p = fileUrl.slice(5);
       if (!p.startsWith('/')) {
         const cwd = typeof process !== 'undefined' && process.cwd ? process.cwd() : '/';
         p = resolve(cwd, p);
@@ -54,19 +54,62 @@ export function getDb(): LibSQLDatabase<typeof schema> {
   return _db;
 }
 
-// Ensure table exists (lightweight, idempotent). Called at API entry.
-let _ensured = false;
-export async function ensureLedgerTable() {
-  if (_ensured) return;
-  const client = getClient();
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS ledgers (
-      id TEXT PRIMARY KEY NOT NULL,
-      data TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    )
-  `);
-  _ensured = true;
+// In-memory fallback for Cloudflare workerd dev without TURSO (file: URLs unsupported in workerd).
+// Production MUST set TURSO_* (free tier) for many-year persistence; memory is per-isolate ephemeral.
+declare global {
+  // eslint-disable-next-line no-var
+  var __memUsers: Map<string, unknown> | undefined;
+  // eslint-disable-next-line no-var
+  var __memLedgers: Map<string, unknown> | undefined;
 }
+export const memUsers: Map<string, unknown> =
+  (globalThis as { __memUsers?: Map<string, unknown> }).__memUsers ?? new Map();
+export const memLedgers: Map<string, unknown> =
+  (globalThis as { __memLedgers?: Map<string, unknown> }).__memLedgers ?? new Map();
+(globalThis as { __memUsers?: Map<string, unknown> }).__memUsers = memUsers;
+(globalThis as { __memLedgers?: Map<string, unknown> }).__memLedgers = memLedgers;
+
+let _memory = false;
+export function isMemoryMode(): boolean {
+  return _memory;
+}
+
+// Ensure all tables exist (lightweight, idempotent). Called at API entry.
+let _ensured = false;
+export async function ensureTables() {
+  if (_ensured && !_memory) return;
+  if (_memory) return;
+  try {
+    const client = getClient();
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY NOT NULL,
+        username TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    `);
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS ledgers (
+        id TEXT PRIMARY KEY NOT NULL,
+        data TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    _ensured = true;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // workerd web-client has no file: support — fall back to memory for local dev
+    if (msg.includes('URL_SCHEME_NOT_SUPPORTED') || msg.includes('file:')) {
+      _memory = true;
+      return;
+    }
+    throw e;
+  }
+}
+
+// Back-compat alias
+export const ensureLedgerTable = ensureTables;
 
 export type Db = ReturnType<typeof getDb>;

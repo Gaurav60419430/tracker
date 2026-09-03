@@ -109,6 +109,7 @@ export default function Home() {
   const [editAmount, setEditAmount] = useState('');
   const [editCategory, setEditCategory] = useState('Food');
   const [editDate, setEditDate] = useState('');
+  const [currentUser, setCurrentUser] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -117,28 +118,56 @@ export default function Home() {
       const localKey = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, '0')}-${String(localToday.getDate()).padStart(2, '0')}`;
       const localMonth = localKey.slice(0, 7);
 
-      // 1) Try localStorage
-      let localLedger: Ledger | null = null;
+      // 0) Who am I? per-user isolation — only their data ever loads
+      let username = '';
       try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) localLedger = JSON.parse(saved) as Ledger;
+        const me = await fetch('/api/auth', { cache: 'no-store' });
+        if (me.ok) {
+          const mj = (await me.json()) as { user?: string; username?: string };
+          username = (mj.username ?? mj.user ?? '').toString().toLowerCase();
+          if (!cancelled && mj.user) setCurrentUser(mj.user as string);
+        }
       } catch {}
 
-      // 2) Try DB via API (Turso / file DB) — durable for many years
-      let serverLedger: Ledger | null = null;
+      const userKey = username ? `${STORAGE_KEY}:${username}` : STORAGE_KEY;
+      // 1) Try per-user localStorage cache
+      let localLedger: Ledger | null = null;
+      try {
+        const saved = localStorage.getItem(userKey);
+        if (saved) localLedger = JSON.parse(saved) as Ledger;
+        // migrate legacy shared key once
+        if (!saved) {
+          const legacy = localStorage.getItem(STORAGE_KEY);
+          if (legacy && username) {
+            localLedger = JSON.parse(legacy) as Ledger;
+            try { localStorage.setItem(userKey, legacy); } catch {}
+          }
+        }
+      } catch {}
+
+      // 2) Try per-user DB via API (free Turso / file DB) — durable for years, isolated by user id
+      let serverLedger: Ledger | null | undefined = undefined; // undefined = fetch failed
       try {
         const res = await fetch('/api/ledger', { cache: 'no-store' });
         if (res.ok) {
           const data = (await res.json()) as { ledger: Ledger | null };
-          if (data.ledger && typeof data.ledger === 'object') serverLedger = data.ledger;
+          // null = unauthenticated/db down; {} = new account (0/0) — use as-is, do NOT fallback to demo
+          serverLedger = data.ledger;
         }
       } catch {}
 
       if (cancelled) return;
-      // Prefer server if it has data (durable), else local, else bootstrap
-      if (serverLedger && Object.keys(serverLedger).length) setLedger(serverLedger);
-      else if (localLedger && Object.keys(localLedger).length) setLedger(localLedger);
-      else if (localMonth !== initialMonth) setLedger((c) => ({ ...c, [localMonth]: emptyMonth() }));
+      if (serverLedger !== undefined && serverLedger !== null) {
+        // Authenticated server truth wins — even {} for brand-new accounts (salary 0 / expenses 0)
+        setLedger(serverLedger);
+      } else if (serverLedger === null) {
+        // unauthenticated — middleware/client guard will redirect; keep local to avoid flash
+        if (localLedger && Object.keys(localLedger).length) setLedger(localLedger);
+      } else {
+        // DB unreachable — fallback to per-user cache
+        if (localLedger && Object.keys(localLedger).length) setLedger(localLedger);
+        else if (localMonth !== initialMonth) setLedger((c) => ({ ...c, [localMonth]: emptyMonth() }));
+      }
 
       setTodayKey(localKey);
       setActiveMonth(localMonth);
@@ -153,11 +182,22 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    // Always keep localStorage as offline cache
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger));
-    } catch {}
-    // Debounced sync to DB for many-year durability
+    // Per-user offline cache + debounced per-user DB sync
+    const writeCache = async () => {
+      let username = '';
+      try {
+        const me = await fetch('/api/auth', { cache: 'no-store' });
+        if (me.ok) {
+          const mj = (await me.json()) as { username?: string; user?: string };
+          username = (mj.username ?? mj.user ?? '').toString().toLowerCase();
+        }
+      } catch {}
+      const userKey = username ? `${STORAGE_KEY}:${username}` : STORAGE_KEY;
+      try {
+        localStorage.setItem(userKey, JSON.stringify(ledger));
+      } catch {}
+    };
+    writeCache();
     if (syncRef.current) window.clearTimeout(syncRef.current);
     syncRef.current = window.setTimeout(async () => {
       try {
@@ -464,6 +504,10 @@ export default function Home() {
             <ArrowRight />
           </Button>
         </div>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.76rem', color: 'var(--paper-dim)', border: '1px solid var(--line)', borderRadius: '999px', padding: '0.3rem 0.65rem', background: 'rgba(255,255,255,0.04)' }} title={currentUser ? `Signed in as ${currentUser}` : 'Signed in'}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+          {currentUser || 'Vault'}
+        </span>
         <Button
           variant="ghost"
           size="icon-sm"
@@ -475,7 +519,7 @@ export default function Home() {
             window.location.href = '/login';
           }}
           aria-label="Logout"
-          title="Logout Gaurav"
+          title={currentUser ? `Logout ${currentUser}` : 'Logout'}
           style={{ color: 'var(--paper-faint)' }}
         >
           <LogOut />

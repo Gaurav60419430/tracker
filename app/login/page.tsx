@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { CircleDollarSign, User, Lock, ArrowRight, Sparkles, Eye, EyeOff, LogIn } from 'lucide-react';
+import { CircleDollarSign, User, Lock, ArrowRight, Sparkles, Eye, EyeOff, LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -11,32 +11,40 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') || '/';
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [okMsg, setOkMsg] = useState('');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
+    setOkMsg('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth', {
+      const endpoint = mode === 'signup' ? '/api/auth/signup' : '/api/auth';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, password }),
       });
-      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!res.ok || !j.ok) throw new Error(j.error || 'Invalid credentials');
-      // also set local flag for vinext dev client guard
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; user?: string };
+      if (!res.ok || !j.ok) throw new Error(j.error || (mode === 'signup' ? 'Could not create account' : 'Invalid credentials'));
       try {
         localStorage.setItem('mt_ok', '1');
+        // clear any stale per-user cache so new account starts clean (0/0)
+        if (mode === 'signup') localStorage.setItem('mt_last_user', (j.user ?? userId).toLowerCase());
       } catch {}
-      router.push(next);
-      router.refresh();
+      if (mode === 'signup') setOkMsg(`Welcome, ${j.user ?? userId}! Your vault starts at ₹0 — entering…`);
+      setTimeout(() => {
+        router.push(next);
+        router.refresh();
+      }, mode === 'signup' ? 700 : 0);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Login failed');
+      setErr(e instanceof Error ? e.message : 'Request failed');
     } finally {
       setLoading(false);
     }
@@ -62,18 +70,18 @@ function LoginForm() {
 
           <div className="login-hero">
             <h1>
-              Welcome back
+              Welcome
               <br />
               <em>to Money Tees.</em>
             </h1>
             <p>
-              Your private ledger — salary, burn, velocity and the next right move. Secured and private.
+              Your private ledger — salary, burn, velocity and the next right move. Every account is isolated: log in from anywhere, see only your data.
             </p>
             <div className="login-stats">
               <span>
-                <Sparkles /> Private
+                <Sparkles /> Private per account
               </span>
-              <span>• On-device</span>
+              <span>• Free DB</span>
               <span>• No tracking</span>
             </div>
           </div>
@@ -96,19 +104,28 @@ function LoginForm() {
 
         <section className="login-right">
           <form className="login-card" onSubmit={submit} aria-label="Money Tees login">
+            <div className="login-tabs" role="tablist" aria-label="Sign in or create account">
+              <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'active' : ''} onClick={() => { setMode('signin'); setErr(''); }}>
+                <LogIn style={{ width: '0.85rem', height: '0.85rem' }} /> Sign in
+              </button>
+              <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setErr(''); }}>
+                <UserPlus style={{ width: '0.85rem', height: '0.85rem' }} /> Create account
+              </button>
+            </div>
+
             <div className="login-card-head">
               <div className="login-card-kicker">
                 <LogIn style={{ width: '0.9rem', height: '0.9rem' }} /> Secure access
               </div>
-              <h2>Sign in to Money Tees</h2>
-              <p>Enter your credentials to continue.</p>
+              <h2>{mode === 'signup' ? 'Create your vault' : 'Sign in to Money Tees'}</h2>
+              <p>{mode === 'signup' ? 'Pick a User ID + password. New vaults start at ₹0 salary, ₹0 expenses.' : 'Enter your credentials to continue.'}</p>
             </div>
 
             <label>
               <span>User ID</span>
               <div className="login-field">
                 <User />
-                <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="Enter user ID" autoComplete="username" autoFocus />
+                <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="e.g. gaurav_07" autoComplete="username" autoFocus />
               </div>
             </label>
 
@@ -120,8 +137,8 @@ function LoginForm() {
                   type={show ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  autoComplete="current-password"
+                  placeholder={mode === 'signup' ? 'Min 4 characters' : 'Enter password'}
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 />
                 <button type="button" className="login-eye" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide' : 'Show'}>
                   {show ? <EyeOff /> : <Eye />}
@@ -130,11 +147,24 @@ function LoginForm() {
             </label>
 
             {err && <div className="login-error">{err}</div>}
+            {okMsg && <div className="login-ok">{okMsg}</div>}
 
             <Button type="submit" disabled={loading} style={{ width: '100%', minHeight: '3rem', marginTop: '0.25rem' }}>
-              {loading ? 'Signing in…' : 'Enter vault'}
+              {loading ? (mode === 'signup' ? 'Creating…' : 'Signing in…') : mode === 'signup' ? 'Create account' : 'Enter vault'}
               <ArrowRight />
             </Button>
+
+            <div className="login-switch">
+              {mode === 'signin' ? (
+                <span>
+                  New here? <button type="button" onClick={() => setMode('signup')}>Create an account</button> — free, isolated vault.
+                </span>
+              ) : (
+                <span>
+                  Have a vault? <button type="button" onClick={() => setMode('signin')}>Sign in</button>
+                </span>
+              )}
+            </div>
           </form>
         </section>
       </div>
@@ -165,6 +195,9 @@ function LoginForm() {
         .login-figure span { font-size:0.72rem; color:var(--paper-dim); letter-spacing:0.08em; }
         .login-right { display:grid; place-items:center; }
         .login-card { width:min(100%, 26rem); display:grid; gap:0.9rem; padding:1.35rem; border-radius:1.35rem; background: linear-gradient(180deg, rgba(26,29,26,0.92), rgba(15,17,16,0.96)); border:1px solid rgba(255,255,255,0.08); backdrop-filter: blur(18px); box-shadow: 0 20px 60px rgba(0,0,0,0.38); }
+        .login-tabs { display:grid; grid-template-columns:1fr 1fr; gap:0.35rem; padding:0.3rem; border-radius:0.9rem; background:rgba(255,255,255,0.04); border:1px solid var(--line); }
+        .login-tabs button { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; min-height:2.35rem; border:0; border-radius:0.65rem; background:transparent; color:var(--paper-dim); font-size:0.84rem; font-weight:700; cursor:pointer; }
+        .login-tabs button.active { background:var(--accent); color:var(--ink); }
         .login-card-head h2 { margin:0; font-size:1.45rem; letter-spacing:-0.03em; }
         .login-card-head p { margin:0.2rem 0 0; color:var(--paper-dim); font-size:0.88rem; }
         .login-card-kicker { display:inline-flex; align-items:center; gap:0.4rem; color:var(--accent); font-size:0.72rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; }
@@ -176,10 +209,9 @@ function LoginForm() {
         .login-eye:hover { color:var(--paper); background:rgba(255,255,255,0.06); }
         .login-eye svg { width:1rem; height:1rem; }
         .login-error { padding:0.65rem 0.85rem; border-radius:0.7rem; background:rgba(255,109,89,0.12); border:1px solid rgba(255,109,89,0.28); color:#ffd1c8; font-size:0.84rem; }
-        .login-hint { padding:0.65rem 0.8rem; border-radius:0.7rem; background:rgba(201,255,74,0.08); border:1px solid rgba(201,255,74,0.18); color:var(--paper-dim); font-size:0.78rem; line-height:1.5; }
-        .login-hint strong { color:var(--accent); }
-        .login-hint code { background:rgba(255,255,255,0.06); padding:0.1rem 0.35rem; border-radius:0.3rem; font-size:0.76rem; }
-        .login-foot { display:flex; flex-direction:column; gap:0.2rem; padding-top:0.6rem; border-top:1px solid var(--line); color:var(--paper-faint); font-size:0.7rem; line-height:1.5; }
+        .login-ok { padding:0.65rem 0.85rem; border-radius:0.7rem; background:rgba(201,255,74,0.1); border:1px solid rgba(201,255,74,0.24); color:var(--accent); font-size:0.84rem; }
+        .login-switch { text-align:center; color:var(--paper-dim); font-size:0.82rem; }
+        .login-switch button { border:0; background:transparent; color:var(--accent); font-weight:700; cursor:pointer; padding:0; }
         @media (max-width: 880px) { .login-shell { grid-template-columns:1fr; } .login-figure { height: 18rem; } }
       `}</style>
     </main>

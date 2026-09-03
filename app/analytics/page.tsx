@@ -57,24 +57,37 @@ export default function AnalyticsPage() {
       const now = new Date();
       const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const m = key.slice(0, 7);
+      // per-user identity first
+      let username = '';
+      try {
+        const me = await fetch('/api/auth', { cache: 'no-store' });
+        if (me.ok) {
+          const mj = (await me.json()) as { username?: string; user?: string };
+          username = (mj.username ?? mj.user ?? '').toString().toLowerCase();
+        }
+      } catch {}
+      const userLedgerKey = username ? `${STORAGE_KEY}:${username}` : STORAGE_KEY;
+      const userBudgetKey = username ? `${BUDGET_KEY(m)}:${username}` : BUDGET_KEY(m);
       let local: Ledger | null = null;
       try {
-        const s = localStorage.getItem(STORAGE_KEY);
+        const s = localStorage.getItem(userLedgerKey) ?? localStorage.getItem(STORAGE_KEY);
         if (s) local = JSON.parse(s);
       } catch {}
-      let server: Ledger | null = null;
+      let server: Ledger | null | undefined = undefined;
       try {
         const r = await fetch('/api/ledger', { cache: 'no-store' });
         if (r.ok) {
           const j = (await r.json()) as { ledger: Ledger | null };
-          if (j.ledger) server = j.ledger;
+          server = j.ledger;
         }
       } catch {}
-      if (server && Object.keys(server).length) setLedger(server);
-      else if (local && Object.keys(local).length) setLedger(local);
-      // budgets
+      if (server !== undefined && server !== null) setLedger(server); // {} = new account 0/0
+      else if (server === null) {
+        if (local && Object.keys(local).length) setLedger(local);
+      } else if (local && Object.keys(local).length) setLedger(local);
+      // budgets (per-user)
       try {
-        const b = localStorage.getItem(BUDGET_KEY(m));
+        const b = localStorage.getItem(userBudgetKey);
         if (b) setCatBudgets(JSON.parse(b));
         else {
           const def: Record<string, number> = {};
@@ -91,9 +104,20 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    try {
-      localStorage.setItem(BUDGET_KEY(activeMonth), JSON.stringify(catBudgets));
-    } catch {}
+    (async () => {
+      let username = '';
+      try {
+        const me = await fetch('/api/auth', { cache: 'no-store' });
+        if (me.ok) {
+          const mj = (await me.json()) as { username?: string; user?: string };
+          username = (mj.username ?? mj.user ?? '').toString().toLowerCase();
+        }
+      } catch {}
+      const k = username ? `${BUDGET_KEY(activeMonth)}:${username}` : BUDGET_KEY(activeMonth);
+      try {
+        localStorage.setItem(k, JSON.stringify(catBudgets));
+      } catch {}
+    })();
   }, [catBudgets, activeMonth, hydrated]);
 
   useEffect(() => {
