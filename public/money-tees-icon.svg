@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="512" height="512" rx="128" fill="#0F1110"/>
+<circle cx="256" cy="256" r="172" fill="#1A1D1A" stroke="rgba(240,239,232,0.08)" stroke-width="2"/>
+<!-- Tee shape -->
+<path d="M256 108 L188 144 L170 156 L202 176 L202 360 L310 360 L310 176 L342 156 L324 144 L256 108Z" fill="#F0EFE8" />
+<!-- Sleeve detail -->
+<path d="M188 144 L170 156 L192 170 L210 160 Z" fill="#D0CFC6"/>
+<path d="M324 144 L342 156 L320 170 L302 160 Z" fill="#D0CFC6"/>
+<!-- Dollar circle -->
+<circle cx="256" cy="232" r="64" fill="#0F1110" stroke="#C9FF4A" stroke-width="3"/>
+<path d="M256 200 V264 M238 212 H258 C270 212 278 218 278 232 C278 246 270 252 258 252 H254 C242 252 234 247 234 233 L234 232 M274 252 H254 C242 252 234 258 234 270 C234 282 242 288 254 288 H274" stroke="#C9FF4A" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<!-- Text -->
+<text x="256" y="395" text-anchor="middle" font-family="Satoshi, sans-serif" font-size="42" font-weight="700" letter-spacing="0.22em" fill="#F0EFE8">MONEY TEES</text>
+</svg>

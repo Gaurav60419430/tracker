@@ -243,7 +243,7 @@ export default function Home() {
       {
         name: 'add_expense',
         title: 'Add expense',
-        description: 'Add one expense to the selected NIVARA month and update the dashboard.',
+        description: 'Add one expense to the selected Money Tees month and update the dashboard.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -322,7 +322,7 @@ export default function Home() {
       body: quietDays ? 'No recorded spending on those days. Keep the pattern if it supports your plan.' : 'Every elapsed day contains at least one recorded expense.',
     },
   ];
-  const story = 'Every transaction changes the shape of the month. NIVARA turns that movement into a clear pace, a realistic forecast, and one next decision.'.split(' ');
+  const story = 'Every transaction changes the shape of the month. Money Tees turns that movement into a clear pace, a realistic forecast, and one next decision.'.split(' ');
 
   useGSAP(
     () => {
@@ -347,7 +347,7 @@ export default function Home() {
       <nav className="nav-shell" aria-label="Primary navigation">
         <button className="wordmark" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
           <CircleDollarSign />
-          NIVARA
+          MONEY TEES
         </button>
         <div className="nav-links">
           <button onClick={() => document.querySelector('.bento-section')?.scrollIntoView({ behavior: 'smooth' })}>Overview</button>
@@ -877,7 +877,7 @@ export default function Home() {
       <footer className="action-footer">
         <div>
           <span>
-            <CircleDollarSign style={{ width: '1rem', height: '1rem', color: 'var(--accent)' }} /> NIVARA
+            <CircleDollarSign style={{ width: '1rem', height: '1rem', color: 'var(--accent)' }} /> MONEY TEES
           </span>
           <h2>Keep the month honest.</h2>
           <p>Private on this device. No account, no cloud sync — just your numbers, made legible enough to act on tomorrow.</p>
