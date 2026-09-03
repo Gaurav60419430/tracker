@@ -449,7 +449,7 @@ export default function Home() {
         <div className="nav-links">
           <button onClick={() => document.querySelector('.bento-section')?.scrollIntoView({ behavior: 'smooth' })}>Overview</button>
           <button onClick={() => document.querySelector('.analytics-section')?.scrollIntoView({ behavior: 'smooth' })}>Analytics</button>
-          <Link href="/analytics" style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
+          <Link href="/analytics" prefetch={false} style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
             Math Lab ↗
           </Link>
           <button onClick={() => document.querySelector('.transaction-section')?.scrollIntoView({ behavior: 'smooth' })}>Transactions</button>
@@ -694,8 +694,14 @@ export default function Home() {
         </div>
 
         <div className="analytics-grid">
-          {/* Category Donut */}
-          <article className="analytics-card analytics-donut">
+          {!hydrated ? (
+            <div style={{ gridColumn: 'span 12', minHeight: '18rem', display: 'grid', placeItems: 'center', color: 'var(--paper-faint)', border: '1px dashed var(--line)', borderRadius: '1.25rem' }}>
+              Loading analytics…
+            </div>
+          ) : (
+            <>
+              {/* Category Donut */}
+              <article className="analytics-card analytics-donut">
             <div className="analytics-card-head">
               <h3>Category split</h3>
               <span className="analytics-card-sub">
@@ -892,6 +898,8 @@ export default function Home() {
               </div>
             </div>
           </article>
+            </>
+          )}
         </div>
       </section>
 
