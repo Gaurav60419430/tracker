@@ -2,6 +2,7 @@
 
 import { SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useGSAP } from '@gsap/react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -102,6 +103,11 @@ export default function Home() {
   const [toast, setToast] = useState('');
   const [signalIndex, setSignalIndex] = useState(0);
   const syncRef = useRef<number | null>(null);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editCategory, setEditCategory] = useState('Food');
+  const [editDate, setEditDate] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -266,6 +272,28 @@ export default function Home() {
     updateMonth((c) => ({ ...c, transactions: c.transactions.filter((t) => t.id !== id) }));
     showToast('Transaction removed');
   };
+  const startEdit = (tx: Transaction) => {
+    setEditingTx(tx);
+    setEditName(tx.name);
+    setEditAmount(String(tx.amount));
+    setEditCategory(tx.category);
+    setEditDate(tx.date);
+  };
+  const cancelEdit = () => setEditingTx(null);
+  const saveEdit = () => {
+    if (!editingTx) return;
+    const amt = Number(editAmount);
+    if (!editName.trim() || !Number.isFinite(amt) || amt <= 0 || !categories.includes(editCategory as never) || !editDate.startsWith(activeMonth)) {
+      showToast('Enter valid name, positive amount, category and date in this month');
+      return;
+    }
+    updateMonth((c) => ({
+      ...c,
+      transactions: c.transactions.map((t) => (t.id === editingTx.id ? { ...t, name: editName.trim(), amount: amt, category: editCategory, date: editDate } : t)),
+    }));
+    setEditingTx(null);
+    showToast('Transaction updated');
+  };
   const exportCsv = () => {
     const rows = [['Date', 'Description', 'Category', 'Amount'], ...month.transactions.map((t) => [t.date, t.name, t.category, String(t.amount)])];
     const blob = new Blob([rows.map((r) => r.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')], { type: 'text/csv' });
@@ -408,6 +436,9 @@ export default function Home() {
         <div className="nav-links">
           <button onClick={() => document.querySelector('.bento-section')?.scrollIntoView({ behavior: 'smooth' })}>Overview</button>
           <button onClick={() => document.querySelector('.analytics-section')?.scrollIntoView({ behavior: 'smooth' })}>Analytics</button>
+          <Link href="/analytics" style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
+            Math Lab ↗
+          </Link>
           <button onClick={() => document.querySelector('.transaction-section')?.scrollIntoView({ behavior: 'smooth' })}>Transactions</button>
           <button onClick={() => document.querySelector('.stack-section')?.scrollIntoView({ behavior: 'smooth' })}>Signals</button>
         </div>
@@ -954,9 +985,14 @@ export default function Home() {
                 </div>
                 <h3>{tx.name}</h3>
                 <strong>-{money(tx.amount)}</strong>
-                <Button variant="ghost" size="icon-sm" aria-label={`Delete ${tx.name}`} onClick={() => removeTransaction(tx.id)}>
-                  <Trash2 />
-                </Button>
+                <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                  <Button variant="ghost" size="icon-sm" aria-label={`Edit ${tx.name}`} onClick={() => startEdit(tx)}>
+                    <Pencil style={{ width: '1rem', height: '1rem' }} />
+                  </Button>
+                  <Button variant="ghost" size="icon-sm" aria-label={`Delete ${tx.name}`} onClick={() => removeTransaction(tx.id)}>
+                    <Trash2 />
+                  </Button>
+                </div>
               </article>
             ))
           ) : (
@@ -987,6 +1023,52 @@ export default function Home() {
           <p>Press ⌘K anywhere to jump to the capture bar. Your ledger is stored in localStorage.</p>
         </div>
       </footer>
+
+      {editingTx && (
+        <div className="edit-overlay" role="dialog" aria-modal="true" aria-label={`Edit ${editingTx.name}`} onClick={(e) => e.target === e.currentTarget && cancelEdit()}>
+          <div className="edit-modal">
+            <div className="edit-modal-head">
+              <h3>Edit transaction</h3>
+              <Button variant="ghost" size="icon-sm" onClick={cancelEdit} aria-label="Close">
+                <X />
+              </Button>
+            </div>
+            <label>
+              Description
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Dinner with friends" />
+            </label>
+            <label>
+              Amount
+              <div className="money-field">
+                <span>₹</span>
+                <Input value={editAmount} onChange={(e) => setEditAmount(e.target.value)} type="number" min="0" step="0.01" placeholder="0" />
+              </div>
+            </label>
+            <label>
+              Category
+              <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Date
+              <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} min={`${activeMonth}-01`} max={`${activeMonth}-${String(daysInMonth).padStart(2, '0')}`} />
+            </label>
+            <div className="edit-modal-actions">
+              <Button variant="outline" onClick={cancelEdit}>
+                Cancel
+              </Button>
+              <Button onClick={saveEdit}>
+                <Check /> Save changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <output className="toast" aria-live="polite">
