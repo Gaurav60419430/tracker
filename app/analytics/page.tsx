@@ -226,9 +226,9 @@ export default function AnalyticsPage() {
           <Link href="/" style={{ color: 'var(--paper-dim)', fontSize: '0.82rem', textDecoration: 'none' }}>
             Home
           </Link>
-          <Link href="/analytics" style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
+          <a href="/analytics" style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
             Math Lab
-          </Link>
+          </a>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <div className="nav-month">

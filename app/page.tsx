@@ -449,9 +449,9 @@ export default function Home() {
         <div className="nav-links">
           <button onClick={() => document.querySelector('.bento-section')?.scrollIntoView({ behavior: 'smooth' })}>Overview</button>
           <button onClick={() => document.querySelector('.analytics-section')?.scrollIntoView({ behavior: 'smooth' })}>Analytics</button>
-          <Link href="/analytics" prefetch={false} style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
+          <a href="/analytics" style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
             Math Lab ↗
-          </Link>
+          </a>
           <button onClick={() => document.querySelector('.transaction-section')?.scrollIntoView({ behavior: 'smooth' })}>Transactions</button>
           <button onClick={() => document.querySelector('.stack-section')?.scrollIntoView({ behavior: 'smooth' })}>Signals</button>
         </div>
