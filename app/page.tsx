@@ -353,6 +353,20 @@ export default function Home() {
   const maxDaily = useMemo(() => Math.max(...dailySpendData.map((d) => d.amount), 1), [dailySpendData]);
   const avgDaily = useMemo(() => (spent / Math.max(elapsed, 1)).toFixed(0), [spent, elapsed]);
 
+  const yearlyData = useMemo(() => {
+    const year = activeMonth.slice(0, 4);
+    const yMonths = Object.keys(ledger).filter((k) => k.startsWith(year)).sort();
+    let ySpent = 0, ySalary = 0;
+    yMonths.forEach((k) => {
+      const m = ledger[k]!;
+      const s = m.transactions.reduce((acc, t) => acc + t.amount, 0);
+      ySpent += s;
+      ySalary += m.salary;
+    });
+    const ySaved = Math.max(0, ySalary - ySpent);
+    return { year, count: yMonths.length, spent: ySpent, salary: ySalary, saved: ySaved, avg: yMonths.length ? Math.round(ySpent / yMonths.length) : 0 };
+  }, [ledger, activeMonth]);
+
   const signals = [
     { title: projectedSavings >= month.savingsGoal ? 'Your savings target is holding.' : 'The current pace misses your target.', body: `Month-end projection: ${money(projectedSavings)} saved after ${money(projectedSpend)} of spending.` },
     {
@@ -775,6 +789,47 @@ export default function Home() {
             <div className="analytics-foot">
               <span>{activeMonth} saved</span>
               <strong className={balance < 0 ? 'loss' : ''}>{money(balance)}</strong>
+            </div>
+          </article>
+
+          {/* Yearly Archive — many-year view */}
+          <article className="analytics-card" style={{ gridColumn: 'span 12' }}>
+            <div className="analytics-card-head">
+              <h3>FY {yearlyData.year} — yearly archive</h3>
+              <span className="analytics-card-sub">
+                {yearlyData.count} months stored · durable DB ensures many-year history
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '0.75rem', marginTop: '0.9rem' }}>
+              <div style={{ padding: '0.9rem', borderRadius: '0.9rem', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--paper-faint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Year Salary</div>
+                <strong style={{ fontSize: '1.35rem', color: 'var(--paper)' }}>{money(yearlyData.salary)}</strong>
+              </div>
+              <div style={{ padding: '0.9rem', borderRadius: '0.9rem', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--paper-faint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Year Spent</div>
+                <strong style={{ fontSize: '1.35rem', color: 'var(--paper)' }}>{money(yearlyData.spent)}</strong>
+                <div style={{ fontSize: '0.76rem', color: 'var(--paper-dim)' }}>Avg {money(yearlyData.avg)}/mo</div>
+              </div>
+              <div style={{ padding: '0.9rem', borderRadius: '0.9rem', background: 'var(--accent)', border: '1px solid rgba(201,255,74,0.35)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'rgba(15,17,16,0.6)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Year Saved</div>
+                <strong style={{ fontSize: '1.35rem', color: 'var(--ink)' }}>{money(yearlyData.saved)}</strong>
+                <div style={{ fontSize: '0.76rem', color: 'rgba(15,17,16,0.62)' }}>{yearlyData.salary ? ((yearlyData.saved / yearlyData.salary) * 100).toFixed(1) : '0.0'}% rate</div>
+              </div>
+              <div style={{ padding: '0.9rem', borderRadius: '0.9rem', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const blob = new Blob([JSON.stringify(ledger, null, 2)], { type: 'application/json' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `money-tees-${yearlyData.year}.json`;
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  }}
+                >
+                  <Download /> Backup JSON
+                </Button>
+              </div>
             </div>
           </article>
         </div>
