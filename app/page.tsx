@@ -101,27 +101,69 @@ export default function Home() {
   const [filter, setFilter] = useState('All');
   const [toast, setToast] = useState('');
   const [signalIndex, setSignalIndex] = useState(0);
+  const syncRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
+    let cancelled = false;
+    const frame = window.requestAnimationFrame(async () => {
       const localToday = new Date();
       const localKey = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, '0')}-${String(localToday.getDate()).padStart(2, '0')}`;
       const localMonth = localKey.slice(0, 7);
+
+      // 1) Try localStorage
+      let localLedger: Ledger | null = null;
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) setLedger(JSON.parse(saved) as Ledger);
-        else if (localMonth !== initialMonth) setLedger((c) => ({ ...c, [localMonth]: emptyMonth() }));
+        if (saved) localLedger = JSON.parse(saved) as Ledger;
       } catch {}
+
+      // 2) Try DB via API (Turso / file DB) — durable for many years
+      let serverLedger: Ledger | null = null;
+      try {
+        const res = await fetch('/api/ledger', { cache: 'no-store' });
+        if (res.ok) {
+          const data = (await res.json()) as { ledger: Ledger | null };
+          if (data.ledger && typeof data.ledger === 'object') serverLedger = data.ledger;
+        }
+      } catch {}
+
+      if (cancelled) return;
+      // Prefer server if it has data (durable), else local, else bootstrap
+      if (serverLedger && Object.keys(serverLedger).length) setLedger(serverLedger);
+      else if (localLedger && Object.keys(localLedger).length) setLedger(localLedger);
+      else if (localMonth !== initialMonth) setLedger((c) => ({ ...c, [localMonth]: emptyMonth() }));
+
       setTodayKey(localKey);
       setActiveMonth(localMonth);
       setDate(localKey);
       setHydrated(true);
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   useEffect(() => {
-    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger));
+    if (!hydrated) return;
+    // Always keep localStorage as offline cache
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger));
+    } catch {}
+    // Debounced sync to DB for many-year durability
+    if (syncRef.current) window.clearTimeout(syncRef.current);
+    syncRef.current = window.setTimeout(async () => {
+      try {
+        await fetch('/api/ledger', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ledger }),
+        });
+      } catch {}
+    }, 700);
+    return () => {
+      if (syncRef.current) window.clearTimeout(syncRef.current);
+    };
   }, [ledger, hydrated]);
 
   useEffect(() => {
