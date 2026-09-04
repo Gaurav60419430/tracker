@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { billsDueInMonth, billsTotal, detectRecurringBills } from '@/lib/recurring';
 import {
   Area,
   AreaChart,
@@ -448,6 +449,10 @@ export default function Home() {
     return { year, count: yMonths.length, spent: ySpent, salary: ySalary, saved: ySaved, avg: yMonths.length ? Math.round(ySpent / yMonths.length) : 0 };
   }, [ledger, activeMonth]);
 
+  const recurringBills = useMemo(() => detectRecurringBills(ledger), [ledger]);
+  const billsThisMonth = useMemo(() => billsDueInMonth(recurringBills, activeMonth), [recurringBills, activeMonth]);
+  const billsTotalThisMonth = billsTotal(billsThisMonth);
+
   const signals = [
     { title: projectedSavings >= month.savingsGoal ? 'Your savings target is holding.' : 'The current pace misses your target.', body: `Month-end projection: ${money(projectedSavings)} saved after ${money(projectedSpend)} of spending.` },
     {
@@ -457,6 +462,10 @@ export default function Home() {
     {
       title: `${quietDays} quiet day${quietDays === 1 ? '' : 's'} this month.`,
       body: quietDays ? 'No recorded spending on those days. Keep the pattern if it supports your plan.' : 'Every elapsed day contains at least one recorded expense.',
+    },
+    {
+      title: billsThisMonth.length ? `${billsThisMonth.length} recurring bill${billsThisMonth.length === 1 ? '' : 's'} due this month.` : 'No recurring bills detected yet.',
+      body: billsThisMonth.length ? `${billsThisMonth.map((b) => b.name).join(', ')} — about ${money(billsTotalThisMonth)} committed.` : 'Log the same expense in two months and it will be tracked here.',
     },
   ];
   const story = 'Every transaction changes the shape of the month. Money Tees turns that movement into a clear pace, a realistic forecast, and one next decision.'.split(' ');
@@ -944,6 +953,41 @@ export default function Home() {
                 </Button>
               </div>
             </div>
+          </article>
+
+          {/* Upcoming bills — recurring detector over the whole ledger */}
+          <article className="analytics-card" style={{ gridColumn: 'span 12' }}>
+            <div className="analytics-card-head">
+              <h3>Upcoming bills</h3>
+              <span className="analytics-card-sub">
+                {billsThisMonth.length
+                  ? `${billsThisMonth.length} recurring bill${billsThisMonth.length === 1 ? '' : 's'} due in ${monthLabel(activeMonth)} · ${money(billsTotalThisMonth)} committed`
+                  : 'Recurring expenses detected from your history'}
+              </span>
+            </div>
+            {billsThisMonth.length ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '0.75rem', marginTop: '0.9rem' }}>
+                {billsThisMonth.map((b) => (
+                  <div key={`${b.name}-${b.amount}`} style={{ padding: '0.9rem', borderRadius: '0.9rem', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                      <strong style={{ fontSize: '0.95rem', color: 'var(--paper)' }}>{b.name}</strong>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: categoryColors[b.category] ?? '#9ca3af', flexShrink: 0 }} />
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--paper-dim)', marginTop: '0.35rem' }}>
+                      Due {new Date(`${b.nextDate}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {money(b.amount)}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--paper-faint)', marginTop: '0.3rem' }}>
+                      Seen {b.streak} month{b.streak === 1 ? '' : 's'} in a row
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="analytics-empty" style={{ marginTop: '0.9rem' }}>
+                <Wallet style={{ opacity: 0.35 }} />
+                <p>Log the same expense in two months — it will show up here as a recurring bill.</p>
+              </div>
+            )}
           </article>
             </>
           )}
