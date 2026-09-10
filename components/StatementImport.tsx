@@ -98,6 +98,7 @@ export function StatementImport({
   const [pendingPdf, setPendingPdf] = useState<ArrayBuffer | null>(null);
   const [pasted, setPasted] = useState('');
   const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [debugLines, setDebugLines] = useState<string[]>([]);
   const inReview = rows.length > 0;
 
   const totals = useMemo(() => {
@@ -118,6 +119,7 @@ export function StatementImport({
     setPendingPdf(null);
     setPasted('');
     setRows([]);
+    setDebugLines([]);
     setDragOver(false);
   };
 
@@ -145,6 +147,7 @@ export function StatementImport({
     setError('');
     try {
       const text = await file.text();
+      setDebugLines(text.split(/\r?\n/).slice(0, 200));
       if (!looksLikeStatement(text) && text.length < 40) {
         setError('That file does not look like a bank statement. Paste statement text below instead.');
         return;
@@ -164,6 +167,7 @@ export function StatementImport({
     setError('');
     try {
       const lines = await extractPdfLines(data, password);
+      setDebugLines(lines.slice(0, 200));
       const entries = parseStatementLines(lines);
       if (!entries.length) {
         setError(
@@ -231,6 +235,7 @@ export function StatementImport({
   const handlePasted = () => {
     setError('');
     const text = pasted.trim();
+    setDebugLines(text.split(/\r?\n/).slice(0, 200));
     if (text.length < 20) {
       setError('Paste a few statement lines first (date + description + amount).');
       return;
@@ -268,6 +273,28 @@ export function StatementImport({
     );
     close();
   };
+
+  const debugBlock = debugLines.length > 0 && (
+    <details style={{ border: '1px solid var(--line)', borderRadius: '0.7rem', padding: '0.55rem 0.7rem', fontSize: '0.76rem', color: 'var(--paper-dim)' }}>
+      <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--paper-faint)' }}>
+        View extracted text ({debugLines.length} lines) — verify what the reader saw
+      </summary>
+      <pre
+        style={{
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          maxHeight: '12rem',
+          overflowY: 'auto',
+          margin: '0.5rem 0 0',
+          fontSize: '0.72rem',
+          fontFamily: 'ui-monospace, monospace',
+          color: 'var(--paper-dim)',
+        }}
+      >
+        {debugLines.slice(0, 80).join('\n')}
+      </pre>
+    </details>
+  );
 
   return (
     <div
@@ -421,6 +448,7 @@ export function StatementImport({
                 <span>{error}</span>
               </div>
             )}
+            {debugBlock}
             <div className="edit-modal-actions">
               <Button variant="outline" onClick={close} disabled={!!busy}>
                 Cancel
@@ -465,6 +493,8 @@ export function StatementImport({
                 </span>
               </button>
             </div>
+
+            {debugBlock}
 
             <div style={{ overflowY: 'auto', display: 'grid', gap: '0.5rem', paddingRight: '0.15rem', minHeight: 0 }}>
               {rows.map((r) => (

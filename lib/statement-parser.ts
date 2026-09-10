@@ -89,18 +89,21 @@ export function parseAmountFlexible(raw: string): number | null {
   if (raw == null) return null;
   let s = String(raw).trim();
   if (!s || s === '-' || s === '--' || s.toLowerCase() === 'nil') return null;
-  const negativeParen = /^\(.*\)$/.test(s);
+  // Strip currency words WITHOUT touching the decimal point (it carries the paise).
   s = s
-    .replace(/[₹Rs.\s]/gi, (tok) => (/\d/.test(tok) ? tok : ' '))
-    .replace(/INR/gi, ' ')
+    .replace(/₹/g, ' ')
+    .replace(/\bRs\.?/gi, ' ')
+    .replace(/\bINR\b/gi, ' ')
     .trim();
   // strip Cr/Dr markers for numeric parse (direction handled separately)
   s = s.replace(/\b(cr|dr|credit|debit)\b\.?/gi, ' ').trim();
-  s = s.replace(/[^0-9.,()-]/g, '').trim();
+  // accounting negatives "(1,200.00)" — we store abs values, direction is separate
+  s = s.replace(/[()]/g, '');
+  s = s.replace(/[^0-9.,-]/g, '').trim();
   if (!s || s === '-' || s === '.' || s === ',') return null;
   const num = Number(s.replace(/,/g, ''));
-  if (!Number.isFinite(num) || num === 0) return num === 0 ? 0 : null;
-  void negativeParen;
+  if (!Number.isFinite(num)) return null;
+  if (num === 0) return 0;
   return Math.abs(num);
 }
 
@@ -325,11 +328,71 @@ const DATE_AT_START =
 const AMOUNT_TOKEN = /\(?[\d,]+\.\d{1,2}\)?/g;
 const FOOTER_HINT = /opening balance|closing balance|balance b\/f|carried forward|brought forward|statement of account|account statement|page \d+|total\s*credit|total\s*debit/i;
 
+// pdf.js text extraction frequently splits one printed amount into chunks
+// ("22,500." + "00"), which rejoin with a space: "22,500. 00".
+const PAISA_SPLIT = /(\d[\d,]*\.)\s+(\d{2}\b)/g; // "22,500. 00" -> "22,500.00"
+const THOU_SPLIT = /(\d),\s+(?=\d{3}\b)/g; // "22, 500.00" -> "22,500.00"
+
+function repairAmountSpacing(line: string): string {
+  return line.replace(PAISA_SPLIT, '$1$2').replace(THOU_SPLIT, '$1,');
+}
+
+// Digit runs that stand alone — runs glued to letters/digits (Y89933729,
+// UPIAR/1123119545479/) are references, not money. No lookbehind (older Safari).
+function standaloneInts(text: string): string[] {
+  const out: string[] = [];
+  const re = /[\d,]{3,}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const before = m.index > 0 ? text[m.index - 1] : ' ';
+    const after = text[m.index + m[0].length] ?? ' ';
+    if (/[A-Za-z0-9]/.test(before)) continue;
+    if (/\d/.test(after)) continue;
+    out.push(m[0]);
+  }
+  return out;
+}
+
+function hasAmountLike(text: string): boolean {
+  if ((text.match(AMOUNT_TOKEN) ?? []).length) return true;
+  return standaloneInts(text).length > 0;
+}
+
+// Bank PDFs wrap long narrations across lines, breaking the date -> amount
+// pairing ("...NEFT:ADVERKEY TECHNOLOGIES" / "PRIVATE LIMITED 22,500.00 ...").
+// Rejoin a dated line that carries no amount with the dateless lines after it.
+function joinWrappedRows(rawLines: string[]): string[] {
+  const out: string[] = [];
+  let pending = '';
+  for (const raw of rawLines) {
+    const line = repairAmountSpacing(String(raw ?? '').replace(/\s+/g, ' ').trim());
+    if (!line) continue;
+    if (DATE_AT_START.test(line)) {
+      if (pending && hasAmountLike(pending)) out.push(pending);
+      pending = line;
+      if (hasAmountLike(line)) {
+        out.push(line);
+        pending = '';
+      }
+    } else if (pending) {
+      pending = repairAmountSpacing(`${pending} ${line}`.slice(0, 600));
+      if (hasAmountLike(pending)) {
+        out.push(pending);
+        pending = '';
+      }
+    } else {
+      out.push(line); // narration tail / header — the parse loop decides
+    }
+  }
+  if (pending && hasAmountLike(pending)) out.push(pending);
+  return out;
+}
+
 /** Parse plain-text lines (PDF text layer or pasted statement text). */
 export function parseStatementLines(lines: string[]): ParsedStatementEntry[] {
   const entries: ParsedStatementEntry[] = [];
 
-  for (const rawLine of lines) {
+  for (const rawLine of joinWrappedRows(lines)) {
     const line = String(rawLine ?? '').replace(/\s+/g, ' ').trim();
     if (!line || line.length < 8) continue;
     if (FOOTER_HINT.test(line) && !DATE_AT_START.test(line)) continue;
@@ -363,10 +426,17 @@ export function parseStatementLines(lines: string[]): ParsedStatementEntry[] {
     let tokens = rest.match(AMOUNT_TOKEN) ?? [];
     if (!tokens.length) {
       // Fallback for whole-rupee lines without paise ("UPI COFFEE 420").
-      const ints = rest.match(/[\d,]{3,}/g) ?? [];
-      tokens = ints.filter((t) => {
-        const n = Number(t.replace(/,/g, ''));
-        return Number.isFinite(n) && n > 0 && n < 100_000_000 && !/^\d{4}$/.test(t.replace(/,/g, ''));
+      // Standalone numbers only: runs glued to letters (Y89933729) are refs,
+      // long pure-digit runs are account/phone numbers (real 7-digit+ rupee
+      // figures carry commas), year fragments are not money.
+      tokens = standaloneInts(rest).filter((t) => {
+        const digits = t.replace(/,/g, '');
+        if (!/^\d+$/.test(digits)) return false;
+        const n = Number(digits);
+        if (!Number.isFinite(n) || n <= 0 || n >= 100_000_000) return false;
+        if (!t.includes(',') && digits.length >= 7) return false;
+        if (/^(19|20|21)\d{2}$/.test(digits) && !t.includes(',')) return false;
+        return true;
       });
     }
     if (!tokens.length) continue;
