@@ -121,6 +121,9 @@ export default function Home() {
   const [toast, setToast] = useState('');
   const [signalIndex, setSignalIndex] = useState(0);
   const syncRef = useRef<number | null>(null);
+  const ledgerRef = useRef(ledger);
+  ledgerRef.current = ledger;
+  const notifiedRef = useRef(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editName, setEditName] = useState('');
   const [editAmount, setEditAmount] = useState('');
@@ -128,6 +131,7 @@ export default function Home() {
   const [editDate, setEditDate] = useState('');
   const [currentUser, setCurrentUser] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [syncState, setSyncState] = useState<'synced' | 'saving' | 'device-only'>('saving');
 
   useEffect(() => {
     let cancelled = false;
@@ -203,9 +207,23 @@ export default function Home() {
     };
   }, []);
 
+  // Single upload path for the ledger: true only when the server confirms receipt.
+  const pushLedger = useCallback(async (snapshot: Ledger): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/ledger', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ledger: snapshot }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     if (!hydrated) return;
-    // Per-user offline cache + debounced per-user DB sync
+    // Per-user offline cache + debounced per-user DB sync (with visible status)
     const writeCache = async () => {
       let username = '';
       try {
@@ -222,19 +240,53 @@ export default function Home() {
     };
     writeCache();
     if (syncRef.current) window.clearTimeout(syncRef.current);
+    setSyncState('saving');
     syncRef.current = window.setTimeout(async () => {
-      try {
-        await fetch('/api/ledger', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ledger }),
-        });
-      } catch {}
+      const ok = await pushLedger(ledger);
+      if (ok) {
+        notifiedRef.current = false;
+        setSyncState('synced');
+      } else {
+        setSyncState('device-only');
+        if (!notifiedRef.current) {
+          notifiedRef.current = true;
+          showToast('Server unreachable — records kept on this device only');
+        }
+      }
     }, 700);
     return () => {
       if (syncRef.current) window.clearTimeout(syncRef.current);
     };
-  }, [ledger, hydrated]);
+  }, [ledger, hydrated, pushLedger]);
+
+  // While device-only: retry the upload every 20s + on reconnect/focus until it lands.
+  useEffect(() => {
+    if (!hydrated || syncState !== 'device-only') return;
+    let stopped = false;
+    const attempt = async () => {
+      if (stopped) return;
+      setSyncState('saving');
+      const ok = await pushLedger(ledgerRef.current);
+      if (stopped) return;
+      if (ok) {
+        notifiedRef.current = false;
+        setSyncState('synced');
+        showToast('Backed up — records synced to your vault');
+      } else {
+        setSyncState('device-only');
+      }
+    };
+    const timer = window.setInterval(() => void attempt(), 20000);
+    const onNet = () => void attempt();
+    window.addEventListener('online', onNet);
+    window.addEventListener('focus', onNet);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      window.removeEventListener('online', onNet);
+      window.removeEventListener('focus', onNet);
+    };
+  }, [hydrated, syncState, pushLedger]);
 
   useEffect(() => {
     // Guard for vinext dev where Next middleware not run — also works on Vercel as fallback
@@ -616,6 +668,27 @@ export default function Home() {
             <ArrowRight />
           </Button>
         </div>
+        <span
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.76rem', color: 'var(--paper-dim)', border: '1px solid var(--line)', borderRadius: '999px', padding: '0.3rem 0.65rem', background: 'rgba(255,255,255,0.04)' }}
+          title={
+            syncState === 'synced'
+              ? 'Backed up — records are in your vault on every browser'
+              : syncState === 'saving'
+                ? 'Saving records to your vault…'
+                : 'Server unreachable — records live ONLY in this browser right now. Set Turso secrets for sync.'
+          }
+        >
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              display: 'inline-block',
+              background: syncState === 'synced' ? 'var(--accent)' : syncState === 'saving' ? '#f59e0b' : 'var(--danger)',
+            }}
+          />
+          {syncState === 'synced' ? 'Synced' : syncState === 'saving' ? 'Saving…' : 'Device only'}
+        </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.76rem', color: 'var(--paper-dim)', border: '1px solid var(--line)', borderRadius: '999px', padding: '0.3rem 0.65rem', background: 'rgba(255,255,255,0.04)' }} title={currentUser ? `Signed in as ${currentUser}` : 'Signed in'}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
           {currentUser || 'Vault'}
