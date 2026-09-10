@@ -5,15 +5,17 @@
 //     Workers without TURSO_*, re-signup with the same User ID)
 //   - device cache empty (new phone / cleared browser)
 // The merged transaction set only ever GROWS. Same-id conflicts resolve to
-// the server copy (synced truth wins); salary/budget/goal take the nonzero
-// side, server winning only when both sides are nonzero and differ.
+// the NEWEST copy by updatedAt (server wins exact ties), so a category you
+// corrected on this device can never be reverted by a stale copy from another
+// browser/tab — and deletes propagate via tombstones instead of resurrecting.
 
-type TxLike = { id: string };
+type TxLike = { id: string; updatedAt?: number };
 type MonthLike<T extends TxLike> = {
   salary: number;
   budget: number;
   savingsGoal: number;
   transactions: T[];
+  deleted?: Record<string, number>; // txId -> deletedAt (tombstones)
 };
 type LedgerLike<T extends TxLike> = Record<string, MonthLike<T>>;
 
@@ -36,6 +38,16 @@ function pickNum(server: unknown, local: unknown): number {
   return s || l;
 }
 
+function tombstones(m: MonthLike<TxLike> | undefined): Record<string, number> {
+  const d = (m as { deleted?: unknown } | undefined)?.deleted;
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = v;
+  }
+  return out;
+}
+
 export function mergeLedgers<T extends TxLike>(
   server: LedgerLike<T> | null | undefined,
   local: LedgerLike<T> | null | undefined,
@@ -47,14 +59,27 @@ export function mergeLedgers<T extends TxLike>(
   for (const k of keys) {
     const sm = s[k];
     const lm = l[k];
+    // Newest copy of each transaction wins (server wins exact ties).
     const byId = new Map<string, T>();
     for (const t of txList(lm)) byId.set(t.id, t);
-    for (const t of txList(sm)) byId.set(t.id, t); // server wins same-id ties
+    for (const t of txList(sm)) {
+      const cur = byId.get(t.id);
+      if (!cur) byId.set(t.id, t);
+      else byId.set(t.id, (t.updatedAt ?? 0) >= (cur.updatedAt ?? 0) ? t : cur);
+    }
+    // Tombstones: newest delete per id wins, then drop anything deleted
+    // after its last edit (prevents deleted rows resurrecting from stale copies).
+    const sDel = tombstones(sm);
+    const lDel = tombstones(lm);
+    const del: Record<string, number> = { ...lDel };
+    for (const [id, at] of Object.entries(sDel)) del[id] = Math.max(del[id] ?? 0, at);
+    const transactions = [...byId.values()].filter((t) => (del[t.id] ?? 0) <= (t.updatedAt ?? 0));
     out[k] = {
       salary: pickNum(sm?.salary, lm?.salary),
       budget: pickNum(sm?.budget, lm?.budget) || 50000,
       savingsGoal: pickNum(sm?.savingsGoal, lm?.savingsGoal),
-      transactions: [...byId.values()],
+      transactions,
+      ...(Object.keys(del).length ? { deleted: del } : {}),
     };
   }
   return out;

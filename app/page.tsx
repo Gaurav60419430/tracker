@@ -50,8 +50,8 @@ import {
 
 gsap.registerPlugin(ScrollTrigger);
 
-type Transaction = { id: string; name: string; category: string; amount: number; date: string; kind?: 'in' | 'out'; source?: string };
-type MonthData = { salary: number; budget: number; savingsGoal: number; transactions: Transaction[] };
+type Transaction = { id: string; name: string; category: string; amount: number; date: string; kind?: 'in' | 'out'; source?: string; updatedAt?: number };
+type MonthData = { salary: number; budget: number; savingsGoal: number; transactions: Transaction[]; deleted?: Record<string, number> };
 type Ledger = Record<string, MonthData>;
 type ModelContext = { registerTool: (tool: Record<string, unknown>, options?: { signal?: AbortSignal }) => void | Promise<void> };
 
@@ -408,7 +408,7 @@ export default function Home() {
     (expense: { name: string; amount: number; category: string; date: string }) => {
       if (!expense.name.trim() || !Number.isFinite(expense.amount) || expense.amount <= 0 || !categories.includes(expense.category as never) || !expense.date.startsWith(activeMonth))
         throw new Error('Enter a valid name, positive amount, category, and date in this month.');
-      const tx: Transaction = { ...expense, name: expense.name.trim(), id: crypto.randomUUID(), kind: 'out', source: 'manual' };
+      const tx: Transaction = { ...expense, name: expense.name.trim(), id: crypto.randomUUID(), kind: 'out', source: 'manual', updatedAt: Date.now() };
       setLedger((c) => ({ ...c, [activeMonth]: { ...(c[activeMonth] ?? emptyMonth()), transactions: [...(c[activeMonth]?.transactions ?? []), tx] } }));
       return tx;
     },
@@ -430,6 +430,7 @@ export default function Home() {
           date: e.date,
           kind: e.direction === 'in' ? 'in' : 'out',
           source: 'statement',
+          updatedAt: Date.now(),
         };
         next[mk] = { ...base, transactions: [...base.transactions, tx] };
       }
@@ -460,7 +461,12 @@ export default function Home() {
     showToast('Salary updated');
   };
   const removeTransaction = (id: string) => {
-    updateMonth((c) => ({ ...c, transactions: c.transactions.filter((t) => t.id !== id) }));
+    // Tombstone the id so the delete survives merges (a stale copy can't resurrect it).
+    updateMonth((c) => ({
+      ...c,
+      transactions: c.transactions.filter((t) => t.id !== id),
+      deleted: { ...(c.deleted ?? {}), [id]: Date.now() },
+    }));
     showToast('Transaction removed');
   };
   const startEdit = (tx: Transaction) => {
@@ -489,6 +495,7 @@ export default function Home() {
               category: editCategory,
               date: editDate,
               kind: editCategory === INCOME_CATEGORY ? ('in' as const) : ('out' as const),
+              updatedAt: Date.now(),
             }
           : t,
       ),
