@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { ArrowLeft, BarChart3, TrendingUp, CalendarDays, GitCommitVertical, Sigma, Wallet, LogOut, CircleDollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mean, median, stddev, cv, pearson, linearRegression } from '@/lib/analyticsMath';
@@ -255,13 +254,13 @@ export default function AnalyticsPage() {
   return (
     <main className="site-root" style={{ width: 'min(100% - 2.25rem, 92rem)', margin: '0 auto', padding: '1.2rem 0 3rem' }}>
       <nav className="nav-shell" aria-label="Primary navigation" style={{ marginBottom: '1.2rem', width: '100%' }}>
-        <Link href="/" className="wordmark" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.6rem', color: 'var(--paper)', textDecoration: 'none', fontWeight: 700, letterSpacing: '0.22em' }}>
+        <a href="/" className="wordmark" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.6rem', color: 'var(--paper)', textDecoration: 'none', fontWeight: 700, letterSpacing: '0.22em' }}>
           <CircleDollarSign style={{ width: '1.2rem', height: '1.2rem', color: 'var(--accent)' }} /> MONEY TEES
-        </Link>
+        </a>
         <div className="nav-links">
-          <Link href="/" style={{ color: 'var(--paper-dim)', fontSize: '0.82rem', textDecoration: 'none' }}>
+          <a href="/" style={{ color: 'var(--paper-dim)', fontSize: '0.82rem', textDecoration: 'none' }}>
             Home
-          </Link>
+          </a>
           <a href="/analytics" style={{ color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(201,255,74,0.22)', padding: '0.3rem 0.65rem', borderRadius: '999px', background: 'rgba(201,255,74,0.09)' }}>
             Math Lab
           </a>
