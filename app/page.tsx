@@ -280,6 +280,23 @@ export default function Home() {
   const runway = dailyBurn > 0 ? Math.max(0, balance / dailyBurn) : 0;
   const paceDelta = month.budget > 0 ? ((spent / month.budget) - elapsed / daysInMonth) * 100 : 0;
   const budgetPct = month.budget > 0 ? Math.min(100, (spent / month.budget) * 100) : 0;
+  // Daily safe-to-spend: what's left divided by the days it must cover.
+  const viewingMonth = activeMonth;
+  const currentMonth = todayKey.slice(0, 7);
+  const daysLeft =
+    viewingMonth === currentMonth
+      ? Math.max(0, daysInMonth - elapsed + 1) // today counts
+      : viewingMonth > currentMonth
+        ? daysInMonth // planning a future month
+        : 0; // past month is closed
+  const dailyAllowance = daysLeft > 0 ? balance / daysLeft : 0;
+  // Payday countdown — assumes salary lands on the 1st, measured from today.
+  const paydayIn = (() => {
+    const t = new Date(`${todayKey}T12:00:00`);
+    if (Number.isNaN(t.getTime())) return 0;
+    const next = new Date(t.getFullYear(), t.getMonth() + 1, 1, 12);
+    return Math.max(0, Math.round((next.getTime() - t.getTime()) / 86400000));
+  })();
 
   const breakdown = useMemo(
     () =>
@@ -643,6 +660,17 @@ export default function Home() {
               Export CSV
             </Button>
           </div>
+          <div className="payday-strip" aria-label="Payday countdown and daily allowance">
+            <span>Payday in {paydayIn}d · 1st</span>
+            <span aria-hidden>·</span>
+            {balance < 0 ? (
+              <span className="over">Over budget — allowance exhausted</span>
+            ) : daysLeft > 0 ? (
+              <span>{money(Math.max(0, Math.round(dailyAllowance)))}/day safe for {daysLeft}d</span>
+            ) : (
+              <span>Month closed</span>
+            )}
+          </div>
         </div>
 
         <figure className="hero-media hero-reveal">
@@ -730,6 +758,18 @@ export default function Home() {
             <strong className={balance < 0 ? 'loss' : ''}>{money(balance)}</strong>
             <p>
               {money(spent)} spent from {money(available)}{statementIncome > 0 ? ` (salary ${money(month.salary)} + ${money(statementIncome)} statement)` : ''} · {balance < 0 ? 'Over budget' : `${savingsRate.toFixed(1)}% held back`}
+            </p>
+            <p style={{ marginTop: '0.35rem' }}>
+              {balance < 0 ? (
+                <>Daily allowance exhausted — spending is over the month&apos;s income.</>
+              ) : daysLeft > 0 ? (
+                <>
+                  ≈ <strong style={{ color: dailyAllowance >= dailyBurn ? 'var(--accent)' : 'var(--danger)' }}>{money(Math.max(0, Math.round(dailyAllowance)))}/day</strong>{' '}
+                  for {daysLeft} day{daysLeft === 1 ? '' : 's'} left{dailyAllowance < dailyBurn ? ' — current burn is faster' : ', on pace'}
+                </>
+              ) : (
+                <>Month closed — final {money(balance)}.</>
+              )}
             </p>
             <div className="bento-progress" aria-hidden>
               <i style={{ width: `${budgetPct}%`, background: balance < 0 ? 'var(--danger)' : budgetPct > 85 ? '#f59e0b' : 'var(--accent)' }} />

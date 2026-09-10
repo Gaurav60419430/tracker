@@ -349,6 +349,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-color: var(--paper);
 }
 
+.payday-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-pill);
+  background: rgba(201,255,74,0.08);
+  border: 1px solid rgba(201,255,74,0.2);
+  color: var(--paper);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.payday-strip span:first-child { color: var(--accent); }
+.payday-strip .over { color: var(--danger); }
+
 .hero-media {
   position: relative;
   height: clamp(22rem, 34vw, 30rem);
