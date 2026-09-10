@@ -343,7 +343,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   color: var(--paper);
   box-shadow: none;
 }
-.hero-actions button:nth-child(2):hover {
+.hero-actions button:nth-child(n+2):hover {
   background: var(--paper);
   color: var(--ink);
   border-color: var(--paper);

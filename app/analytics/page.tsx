@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { mean, median, stddev, cv, pearson, linearRegression } from '@/lib/analyticsMath';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ScatterChart, Scatter, LineChart, Line } from 'recharts';
 
-type Transaction = { id: string; name: string; category: string; amount: number; date: string };
+type Transaction = { id: string; name: string; category: string; amount: number; date: string; kind?: 'in' | 'out' };
 type MonthData = { salary: number; budget: number; savingsGoal: number; transactions: Transaction[] };
 type Ledger = Record<string, MonthData>;
+const isOut = (t: Transaction) => (t.kind ?? 'out') === 'out';
 
 const categories = ['Food', 'Transport', 'Housing', 'Shopping', 'Subscriptions', 'Health', 'Fun', 'Other'] as const;
 const categoryColors: Record<string, string> = {
@@ -129,14 +130,14 @@ export default function AnalyticsPage() {
   }, []);
 
   const month = ledger[activeMonth] ?? { salary: 0, budget: 50000, savingsGoal: 20000, transactions: [] as Transaction[] };
-  const spent = month.transactions.reduce((a, t) => a + t.amount, 0);
+  const spent = month.transactions.filter(isOut).reduce((a, t) => a + t.amount, 0);
   const daysInMonth = new Date(Number(activeMonth.slice(0, 4)), Number(activeMonth.slice(5, 7)), 0).getDate();
   const elapsed = activeMonth === todayKey.slice(0, 7) ? Math.max(1, Number(todayKey.slice(-2))) : daysInMonth;
 
   const dailyAmounts = useMemo(() => {
     return Array.from({ length: daysInMonth }, (_, i) => {
       const ds = `${activeMonth}-${String(i + 1).padStart(2, '0')}`;
-      return month.transactions.filter((t) => t.date === ds).reduce((a, t) => a + t.amount, 0);
+      return month.transactions.filter((t) => isOut(t) && t.date === ds).reduce((a, t) => a + t.amount, 0);
     });
   }, [month.transactions, activeMonth, daysInMonth]);
 
@@ -154,7 +155,7 @@ export default function AnalyticsPage() {
     const d = new Date(Number(lastMonthKey.slice(0, 4)), Number(lastMonthKey.slice(5, 7)), 0).getDate();
     return Array.from({ length: d }, (_, i) => {
       const ds = `${lastMonthKey}-${String(i + 1).padStart(2, '0')}`;
-      return lastMonth.transactions.filter((t) => t.date === ds).reduce((a, t) => a + t.amount, 0);
+      return lastMonth.transactions.filter((t) => isOut(t) && t.date === ds).reduce((a, t) => a + t.amount, 0);
     });
   }, [lastMonth, lastMonthKey]);
   const lastVol = lastDaily.length ? cv(lastDaily) : 0;
@@ -164,7 +165,7 @@ export default function AnalyticsPage() {
   const weekdayTotals = useMemo(() => {
     const w = Array(7).fill(0) as number[];
     const counts = Array(7).fill(0) as number[];
-    month.transactions.forEach((t) => {
+    month.transactions.filter(isOut).forEach((t) => {
       const d = new Date(`${t.date}T12:00:00`);
       const wd = d.getDay();
       w[wd] += t.amount;
@@ -220,7 +221,7 @@ export default function AnalyticsPage() {
   const catActual = useMemo(() => {
     const m: Record<string, number> = {};
     categories.forEach((c) => (m[c] = 0));
-    month.transactions.forEach((t) => (m[t.category] = (m[t.category] ?? 0) + t.amount));
+    month.transactions.filter(isOut).forEach((t) => (m[t.category] = (m[t.category] ?? 0) + t.amount));
     return m;
   }, [month.transactions]);
 

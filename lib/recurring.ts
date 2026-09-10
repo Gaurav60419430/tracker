@@ -1,7 +1,7 @@
 // Recurring bills detector — pure, testable. Same name + same amount appearing in 2+ months
 // is treated as a recurring bill; the next occurrence is predicted from the latest one.
 
-export type Transaction = { id: string; name: string; category: string; amount: number; date: string };
+export type Transaction = { id: string; name: string; category: string; amount: number; date: string; kind?: 'in' | 'out' };
 export type MonthData = { salary: number; budget: number; savingsGoal: number; transactions: Transaction[] };
 export type Ledger = Record<string, MonthData>;
 
@@ -45,6 +45,7 @@ export function detectRecurringBills(ledger: Ledger): RecurringBill[] {
   const byKey = new Map<string, { name: string; category: string; amount: number; months: string[]; dates: string[] }>();
   for (const [month, data] of Object.entries(ledger)) {
     for (const t of data.transactions) {
+      if ((t.kind ?? 'out') === 'in') continue; // statement income is not a bill
       const key = `${t.name.trim().toLowerCase()}|${t.amount}`;
       const entry = byKey.get(key) ?? { name: t.name.trim(), category: t.category, amount: t.amount, months: [] as string[], dates: [] as string[] };
       if (!entry.months.includes(month)) entry.months.push(month);

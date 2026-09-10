@@ -23,12 +23,14 @@ import {
   Sparkles,
   Trash2,
   TrendingUp,
+  Upload,
   Wallet,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { billsDueInMonth, billsTotal, detectRecurringBills } from '@/lib/recurring';
+import { StatementImport, type StatementImportResult } from '@/components/StatementImport';
 import {
   Area,
   AreaChart,
@@ -47,12 +49,13 @@ import {
 
 gsap.registerPlugin(ScrollTrigger);
 
-type Transaction = { id: string; name: string; category: string; amount: number; date: string };
+type Transaction = { id: string; name: string; category: string; amount: number; date: string; kind?: 'in' | 'out'; source?: string };
 type MonthData = { salary: number; budget: number; savingsGoal: number; transactions: Transaction[] };
 type Ledger = Record<string, MonthData>;
 type ModelContext = { registerTool: (tool: Record<string, unknown>, options?: { signal?: AbortSignal }) => void | Promise<void> };
 
 const categories = ['Food', 'Transport', 'Housing', 'Shopping', 'Subscriptions', 'Health', 'Fun', 'Other'] as const;
+const INCOME_CATEGORY = 'Income';
 const categoryColors: Record<string, string> = {
   Food: '#ff7a3d',
   Transport: '#5cc8ff',
@@ -62,7 +65,10 @@ const categoryColors: Record<string, string> = {
   Health: '#34d399',
   Fun: '#fbbf24',
   Other: '#9ca3af',
+  Income: '#a3e635',
 };
+const isIncomeTx = (t: Transaction) => (t.kind ?? 'out') === 'in';
+const validCategory = (c: string) => (categories as readonly string[]).includes(c) || c === INCOME_CATEGORY;
 const STORAGE_KEY = 'moneta-ledger-v1';
 const bootstrapToday = '2026-09-03';
 const initialMonth = bootstrapToday.slice(0, 7);
@@ -111,6 +117,7 @@ export default function Home() {
   const [editCategory, setEditCategory] = useState('Food');
   const [editDate, setEditDate] = useState('');
   const [currentUser, setCurrentUser] = useState('');
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,14 +252,16 @@ export default function Home() {
   }, []);
 
   const month = ledger[activeMonth] ?? emptyMonth();
-  const spent = month.transactions.reduce((s, t) => s + t.amount, 0);
-  const balance = month.salary - spent;
-  const savingsRate = month.salary > 0 ? Math.max(0, (balance / month.salary) * 100) : 0;
+  const spent = month.transactions.filter((t) => !isIncomeTx(t)).reduce((s, t) => s + t.amount, 0);
+  const statementIncome = month.transactions.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0);
+  const available = month.salary + statementIncome;
+  const balance = available - spent;
+  const savingsRate = available > 0 ? Math.max(0, (balance / available) * 100) : 0;
   const daysInMonth = new Date(Number(activeMonth.slice(0, 4)), Number(activeMonth.slice(5, 7)), 0).getDate();
   const elapsed = activeMonth === todayKey.slice(0, 7) ? Math.max(1, Number(todayKey.slice(-2))) : daysInMonth;
   const dailyBurn = spent / elapsed;
   const projectedSpend = dailyBurn * daysInMonth;
-  const projectedSavings = month.salary - projectedSpend;
+  const projectedSavings = available - projectedSpend;
   const runway = dailyBurn > 0 ? Math.max(0, balance / dailyBurn) : 0;
   const paceDelta = month.budget > 0 ? ((spent / month.budget) - elapsed / daysInMonth) * 100 : 0;
   const budgetPct = month.budget > 0 ? Math.min(100, (spent / month.budget) * 100) : 0;
@@ -262,7 +271,7 @@ export default function Home() {
       categories
         .map((c) => ({
           name: c,
-          amount: month.transactions.filter((t) => t.category === c).reduce((s, t) => s + t.amount, 0),
+          amount: month.transactions.filter((t) => !isIncomeTx(t) && t.category === c).reduce((s, t) => s + t.amount, 0),
           color: categoryColors[c],
         }))
         .filter((i) => i.amount > 0)
@@ -273,7 +282,11 @@ export default function Home() {
   const visibleTransactions = useMemo(
     () =>
       month.transactions
-        .filter((t) => (filter === 'All' || t.category === filter) && t.name.toLowerCase().includes(search.toLowerCase()))
+        .filter(
+          (t) =>
+            (filter === 'All' || (filter === INCOME_CATEGORY ? isIncomeTx(t) : !isIncomeTx(t) && t.category === filter)) &&
+            t.name.toLowerCase().includes(search.toLowerCase()),
+        )
         .sort((a, b) => b.date.localeCompare(a.date)),
     [month.transactions, filter, search],
   );
@@ -298,12 +311,39 @@ export default function Home() {
     (expense: { name: string; amount: number; category: string; date: string }) => {
       if (!expense.name.trim() || !Number.isFinite(expense.amount) || expense.amount <= 0 || !categories.includes(expense.category as never) || !expense.date.startsWith(activeMonth))
         throw new Error('Enter a valid name, positive amount, category, and date in this month.');
-      const tx: Transaction = { ...expense, name: expense.name.trim(), id: crypto.randomUUID() };
+      const tx: Transaction = { ...expense, name: expense.name.trim(), id: crypto.randomUUID(), kind: 'out', source: 'manual' };
       setLedger((c) => ({ ...c, [activeMonth]: { ...(c[activeMonth] ?? emptyMonth()), transactions: [...(c[activeMonth]?.transactions ?? []), tx] } }));
       return tx;
     },
     [activeMonth],
   );
+  const importStatementEntries = useCallback((entries: StatementImportResult) => {
+    if (!entries.length) return;
+    setLedger((prev) => {
+      const next: Ledger = { ...prev };
+      for (const e of entries) {
+        if (!/^\d{4}-\d{2}$/.test(e.date.slice(0, 7)) || !Number.isFinite(e.amount) || e.amount <= 0) continue;
+        const mk = e.date.slice(0, 7);
+        const base = next[mk] ?? emptyMonth();
+        const tx: Transaction = {
+          id: crypto.randomUUID(),
+          name: (e.description || 'Bank transaction').slice(0, 90),
+          category: e.direction === 'in' ? INCOME_CATEGORY : validCategory(e.category) ? e.category : 'Other',
+          amount: Math.abs(e.amount),
+          date: e.date,
+          kind: e.direction === 'in' ? 'in' : 'out',
+          source: 'statement',
+        };
+        next[mk] = { ...base, transactions: [...base.transactions, tx] };
+      }
+      return next;
+    });
+    const inCount = entries.filter((e) => e.direction === 'in').length;
+    const outCount = entries.length - inCount;
+    const inSum = entries.filter((e) => e.direction === 'in').reduce((s, e) => s + e.amount, 0);
+    const outSum = entries.filter((e) => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
+    showToast(`Recorded ${entries.length} payments (${outCount} out ${money(outSum)} · ${inCount} in ${money(inSum)})`);
+  }, []);
   const submitExpense = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
@@ -337,19 +377,33 @@ export default function Home() {
   const saveEdit = () => {
     if (!editingTx) return;
     const amt = Number(editAmount);
-    if (!editName.trim() || !Number.isFinite(amt) || amt <= 0 || !categories.includes(editCategory as never) || !editDate.startsWith(activeMonth)) {
+    if (!editName.trim() || !Number.isFinite(amt) || amt <= 0 || !validCategory(editCategory) || !editDate.startsWith(activeMonth)) {
       showToast('Enter valid name, positive amount, category and date in this month');
       return;
     }
     updateMonth((c) => ({
       ...c,
-      transactions: c.transactions.map((t) => (t.id === editingTx.id ? { ...t, name: editName.trim(), amount: amt, category: editCategory, date: editDate } : t)),
+      transactions: c.transactions.map((t) =>
+        t.id === editingTx.id
+          ? {
+              ...t,
+              name: editName.trim(),
+              amount: amt,
+              category: editCategory,
+              date: editDate,
+              kind: editCategory === INCOME_CATEGORY ? ('in' as const) : ('out' as const),
+            }
+          : t,
+      ),
     }));
     setEditingTx(null);
     showToast('Transaction updated');
   };
   const exportCsv = () => {
-    const rows = [['Date', 'Description', 'Category', 'Amount'], ...month.transactions.map((t) => [t.date, t.name, t.category, String(t.amount)])];
+    const rows = [
+      ['Date', 'Description', 'Category', 'Type', 'Amount'],
+      ...month.transactions.map((t) => [t.date, t.name, t.category, isIncomeTx(t) ? 'Income' : 'Expense', String(t.amount)]),
+    ];
     const blob = new Blob([rows.map((r) => r.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -392,7 +446,9 @@ export default function Home() {
   }, [activeMonth, addExpense]);
 
   const chartPath = useMemo(() => {
-    const totals = Array.from({ length: daysInMonth }, (_, i) => month.transactions.filter((t) => Number(t.date.slice(-2)) <= i + 1).reduce((s, t) => s + t.amount, 0));
+    const totals = Array.from({ length: daysInMonth }, (_, i) =>
+      month.transactions.filter((t) => !isIncomeTx(t) && Number(t.date.slice(-2)) <= i + 1).reduce((s, t) => s + t.amount, 0),
+    );
     const max = Math.max(month.budget, ...totals, 1);
     return `M${totals.map((v, i) => `${(i / Math.max(daysInMonth - 1, 1)) * 600},${170 - (v / max) * 145}`).join(' L')}`;
   }, [month.transactions, month.budget, daysInMonth]);
@@ -401,7 +457,7 @@ export default function Home() {
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;
       const ds = `${activeMonth}-${String(day).padStart(2, '0')}`;
-      const amount = month.transactions.filter((t) => t.date === ds).reduce((s, t) => s + t.amount, 0);
+      const amount = month.transactions.filter((t) => !isIncomeTx(t) && t.date === ds).reduce((s, t) => s + t.amount, 0);
       return { day: String(day), amount, label: `${day}`, full: ds };
     });
   }, [month.transactions, activeMonth, daysInMonth]);
@@ -420,13 +476,14 @@ export default function Home() {
     const last6 = keys.slice(-6);
     return last6.map((k) => {
       const m = ledger[k]!;
-      const s = m.transactions.reduce((acc, t) => acc + t.amount, 0);
-      const bal = m.salary - s;
+      const s = m.transactions.filter((t) => !isIncomeTx(t)).reduce((acc, t) => acc + t.amount, 0);
+      const inflow = m.salary + m.transactions.filter(isIncomeTx).reduce((acc, t) => acc + t.amount, 0);
+      const bal = inflow - s;
       return {
         month: new Date(`${k}-01T12:00:00`).toLocaleDateString('en-IN', { month: 'short' }),
         key: k,
         spent: s,
-        salary: m.salary,
+        salary: inflow,
         saved: bal > 0 ? bal : 0,
       };
     });
@@ -441,9 +498,10 @@ export default function Home() {
     let ySpent = 0, ySalary = 0;
     yMonths.forEach((k) => {
       const m = ledger[k]!;
-      const s = m.transactions.reduce((acc, t) => acc + t.amount, 0);
+      const s = m.transactions.filter((t) => !isIncomeTx(t)).reduce((acc, t) => acc + t.amount, 0);
+      const inflow = m.transactions.filter(isIncomeTx).reduce((acc, t) => acc + t.amount, 0);
       ySpent += s;
-      ySalary += m.salary;
+      ySalary += m.salary + inflow;
     });
     const ySaved = Math.max(0, ySalary - ySpent);
     return { year, count: yMonths.length, spent: ySpent, salary: ySalary, saved: ySaved, avg: yMonths.length ? Math.round(ySpent / yMonths.length) : 0 };
@@ -545,7 +603,7 @@ export default function Home() {
           <dl className="hero-stats" aria-label="Month snapshot">
             <div className="hero-stat">
               <dt>Recorded</dt>
-              <dd>{month.transactions.length} <span>expenses</span></dd>
+              <dd>{month.transactions.length} <span>payments</span></dd>
             </div>
             <div className="hero-stat">
               <dt>Savings rate</dt>
@@ -560,6 +618,10 @@ export default function Home() {
             <Button onClick={() => nameRef.current?.focus()}>
               <Plus />
               Add expense
+            </Button>
+            <Button variant="outline" onClick={() => setShowImport(true)}>
+              <Upload />
+              Import statement
             </Button>
             <Button variant="outline" onClick={exportCsv}>
               <Download />
@@ -652,7 +714,7 @@ export default function Home() {
             </div>
             <strong className={balance < 0 ? 'loss' : ''}>{money(balance)}</strong>
             <p>
-              {money(spent)} spent from {money(month.salary)} · {balance < 0 ? 'Over budget' : `${savingsRate.toFixed(1)}% held back`}
+              {money(spent)} spent from {money(available)}{statementIncome > 0 ? ` (salary ${money(month.salary)} + ${money(statementIncome)} statement)` : ''} · {balance < 0 ? 'Over budget' : `${savingsRate.toFixed(1)}% held back`}
             </p>
             <div className="bento-progress" aria-hidden>
               <i style={{ width: `${budgetPct}%`, background: balance < 0 ? 'var(--danger)' : budgetPct > 85 ? '#f59e0b' : 'var(--accent)' }} />
@@ -1081,21 +1143,26 @@ export default function Home() {
       <section className="transaction-section">
         <div className="section-heading">
           <div>
-            <div className="transaction-kicker">{visibleTransactions.length} {visibleTransactions.length === 1 ? 'expense' : 'expenses'} · {monthLabel(activeMonth)}</div>
-            <h2>Every expense, still within reach.</h2>
+            <div className="transaction-kicker">{visibleTransactions.length} {visibleTransactions.length === 1 ? 'payment' : 'payments'} · {monthLabel(activeMonth)}</div>
+            <h2>Every payment, still within reach.</h2>
           </div>
-          <Button variant="outline" onClick={exportCsv}>
-            <Download /> Export CSV
-          </Button>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <Button variant="outline" onClick={() => setShowImport(true)}>
+              <Upload /> Import statement
+            </Button>
+            <Button variant="outline" onClick={exportCsv}>
+              <Download /> Export CSV
+            </Button>
+          </div>
         </div>
 
         <div className="transaction-tools">
-          <label className="transaction-search" aria-label="Search expenses">
+          <label className="transaction-search" aria-label="Search payments">
             <Search />
-            <Input className="search-field" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search expenses" />
+            <Input className="search-field" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search payments" />
           </label>
           <div className="filter-pills" role="group" aria-label="Filter by category">
-            {['All', ...categories].map((c) => (
+            {['All', INCOME_CATEGORY, ...categories].map((c) => (
               <button key={c} className={`filter-pill ${filter === c ? 'active' : ''}`} onClick={() => setFilter(c)}>
                 {c}
               </button>
@@ -1105,31 +1172,36 @@ export default function Home() {
 
         <div className="transaction-rail">
           {visibleTransactions.length ? (
-            visibleTransactions.map((tx) => (
-              <article key={tx.id} className="transaction-card" style={{ ['--cat' as never]: categoryColors[tx.category] }}>
-                <div>
-                  <span>{tx.category}</span>
-                  <time>{new Date(`${tx.date}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</time>
-                </div>
-                <h3>{tx.name}</h3>
-                <strong>-{money(tx.amount)}</strong>
-                <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                  <Button variant="ghost" size="icon-sm" aria-label={`Edit ${tx.name}`} onClick={() => startEdit(tx)}>
-                    <Pencil style={{ width: '1rem', height: '1rem' }} />
-                  </Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={`Delete ${tx.name}`} onClick={() => removeTransaction(tx.id)}>
-                    <Trash2 />
-                  </Button>
-                </div>
-              </article>
-            ))
+            visibleTransactions.map((tx) => {
+              const income = isIncomeTx(tx);
+              return (
+                <article key={tx.id} className="transaction-card" style={{ ['--cat' as never]: categoryColors[tx.category] ?? categoryColors.Other }}>
+                  <div>
+                    <span>{income ? INCOME_CATEGORY : tx.category}</span>
+                    <time>{new Date(`${tx.date}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</time>
+                  </div>
+                  <h3>{tx.name}</h3>
+                  <strong style={income ? { color: 'var(--accent)' } : undefined}>
+                    {income ? '+' : '-'}{money(tx.amount)}
+                  </strong>
+                  <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                    <Button variant="ghost" size="icon-sm" aria-label={`Edit ${tx.name}`} onClick={() => startEdit(tx)}>
+                      <Pencil style={{ width: '1rem', height: '1rem' }} />
+                    </Button>
+                    <Button variant="ghost" size="icon-sm" aria-label={`Delete ${tx.name}`} onClick={() => removeTransaction(tx.id)}>
+                      <Trash2 />
+                    </Button>
+                  </div>
+                </article>
+              );
+            })
           ) : (
             <div className="empty-state">
               <div style={{ width: '2.4rem', height: '2.4rem', display: 'grid', placeItems: 'center', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--line)' }}>
                 <Search style={{ width: '1rem', height: '1rem', opacity: 0.6 }} />
               </div>
               <h3>No transactions found.</h3>
-              <p>Add an expense or change the filters.</p>
+              <p>Add an expense, import a statement, or change the filters.</p>
             </div>
           )}
         </div>
@@ -1156,7 +1228,7 @@ export default function Home() {
         <div className="edit-overlay" role="dialog" aria-modal="true" aria-label={`Edit ${editingTx.name}`} onClick={(e) => e.target === e.currentTarget && cancelEdit()}>
           <div className="edit-modal">
             <div className="edit-modal-head">
-              <h3>Edit transaction</h3>
+              <h3>Edit {isIncomeTx(editingTx) ? 'income' : 'transaction'}</h3>
               <Button variant="ghost" size="icon-sm" onClick={cancelEdit} aria-label="Close">
                 <X />
               </Button>
@@ -1175,7 +1247,7 @@ export default function Home() {
             <label>
               Category
               <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
-                {categories.map((c) => (
+                {[INCOME_CATEGORY, ...categories].map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -1204,6 +1276,8 @@ export default function Home() {
           {toast}
         </output>
       )}
+
+      <StatementImport open={showImport} onClose={() => setShowImport(false)} onImport={importStatementEntries} />
     </main>
   );
 }
