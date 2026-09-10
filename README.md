@@ -17,7 +17,7 @@ An aesthetic, private, on-device expense tracker built for **many-year** use. No
 - **Bento** — Safe to spend, Salary (inline edit), Daily burn, Spending velocity (`budget%` sparkline)
 - **Analytics** (4 `recharts` 3.8) — Category donut (`PieChart` 62/88), Daily bars (`BarChart` 30-day), Cumulative vs budget (`AreaChart` lime gradient), 6-month trend (`BarChart` salary vs spent)
 - **Story** — GSAP `ScrollTrigger` scrub `opacity 0.12→1` on `·story-word`
-- **Where it goes** — `picsum.photos` accordion with `Hover flex:1→2.2`
+- **Where it goes** — stat tiles per category (amount, share %, transaction count, always visible)
 - **Signals** — 3 auto-rotating (`6s`) insights (pace, pressure, quiet days)
 - **Transactions** — `Search` + `filter-pills` (`All` + 8 categories) → horizontal `transaction-rail` with category color `var(--cat)`
 

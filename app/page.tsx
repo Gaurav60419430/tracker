@@ -324,7 +324,20 @@ export default function Home() {
   );
 
   const quietDays = Math.max(0, elapsed - new Set(month.transactions.map((t) => t.date)).size);
-  const topCategories = [...breakdown, ...categories.filter((c) => !breakdown.some((b) => b.name === c)).map((c) => ({ name: c, amount: 0, color: categoryColors[c] }))].slice(0, 4);
+  const categoryTiles = useMemo(() => {
+    const counts: Record<string, number> = {};
+    month.transactions.forEach((t) => {
+      if (!isIncomeTx(t)) counts[t.category] = (counts[t.category] ?? 0) + 1;
+    });
+    return (categories as readonly string[])
+      .map((c) => ({
+        name: c,
+        amount: breakdown.find((b) => b.name === c)?.amount ?? 0,
+        count: counts[c] ?? 0,
+        color: categoryColors[c],
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [month.transactions, breakdown]);
 
   const showToast = (m: string) => {
     setToast(m);
@@ -1125,25 +1138,29 @@ export default function Home() {
       <section className="accordion-section">
         <div className="accordion-kicker">Where it goes</div>
         <h2>Where the month expands.</h2>
-        <p className="accordion-sub">Hover to inspect each category. The strip keeps you honest about distribution without a single pie chart.</p>
-        <div className="horizontal-accordion">
-          {topCategories.map((item, idx) => (
-            <article
-              key={item.name}
-              style={{
-                backgroundImage: `linear-gradient(180deg, rgba(15,17,16,.08), rgba(15,17,16,.88)), url(https://picsum.photos/seed/nivara-${item.name.toLowerCase()}/800/1100)`,
-              }}
-            >
-              <div className="accordion-badge">{idx + 1}</div>
-              <div>
-                <h3>{item.name}</h3>
-                <p>
-                  {money(item.amount)}
-                  <span>{spent ? `${((item.amount / spent) * 100).toFixed(0)}% of spending` : 'No spend yet'}</span>
-                </p>
-              </div>
-            </article>
-          ))}
+        <p className="accordion-sub">Every rupee, ranked — amount, share and transaction count per category.</p>
+        <div className="category-tiles">
+          {categoryTiles.map((item) => {
+            const pct = spent > 0 ? (item.amount / spent) * 100 : 0;
+            return (
+              <article key={item.name} className={`cat-tile${item.amount === 0 ? ' empty' : ''}`}>
+                <div className="cat-tile-head">
+                  <span>
+                    <i style={{ background: item.color }} />
+                    {item.name}
+                  </span>
+                  <em>
+                    {item.count} tx{item.count === 1 ? '' : 's'}
+                  </em>
+                </div>
+                <strong>{money(item.amount)}</strong>
+                <div className="cat-tile-bar" aria-hidden>
+                  <i style={{ width: `${Math.min(100, pct)}%`, background: item.color }} />
+                </div>
+                <small>{spent ? `${pct.toFixed(0)}% of spending` : 'No spend yet'}</small>
+              </article>
+            );
+          })}
         </div>
       </section>
 
