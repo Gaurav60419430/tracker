@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, BarChart3, TrendingUp, CalendarDays, GitCommitVertical, Sigma, Wallet, LogOut, CircleDollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mean, median, stddev, cv, pearson, linearRegression } from '@/lib/analyticsMath';
+import { mergeLedgers } from '@/lib/ledger-merge';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ScatterChart, Scatter, LineChart, Line } from 'recharts';
 
 type Transaction = { id: string; name: string; category: string; amount: number; date: string; kind?: 'in' | 'out' };
@@ -39,6 +40,15 @@ const demoTransactions: Transaction[] = [
 ];
 
 const money = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
+// Short Indian units for chart axes: K (thousand) → L (lakh) → Cr (crore).
+const moneyShort = (v: number) => {
+  const abs = Math.abs(v);
+  const trim = (n: number) => String(Math.round(n * 10) / 10);
+  if (abs >= 10000000) return `₹${trim(v / 10000000)} Cr`;
+  if (abs >= 100000) return `₹${trim(v / 100000)} L`;
+  if (abs >= 1000) return `₹${trim(v / 1000)}K`;
+  return money(Math.round(v));
+};
 const monthLabel = (k: string) => new Date(`${k}-01T12:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 const shiftMonth = (k: string, d: number) => {
   const dt = new Date(`${k}-01T12:00:00`);
@@ -82,10 +92,11 @@ export default function AnalyticsPage() {
           server = j.ledger;
         }
       } catch {}
-      if (server !== undefined && server !== null) setLedger(server); // {} = new account 0/0
-      else if (server === null) {
-        if (local && Object.keys(local).length) setLedger(local);
-      } else if (local && Object.keys(local).length) setLedger(local);
+      // Union-merge (display only — this page never writes the ledger):
+      // a fresh/empty {} row can never hide this device's records.
+      const merged = mergeLedgers(server ?? undefined, local ?? undefined);
+      if (server !== undefined && server !== null) setLedger(Object.keys(merged).length ? merged : server); // {} = new account 0/0
+      else if (local && Object.keys(local).length) setLedger(merged);
       // budgets (per-user)
       try {
         const b = localStorage.getItem(userBudgetKey);
@@ -330,7 +341,7 @@ export default function AnalyticsPage() {
               <BarChart data={Array.from({ length: elapsed }, (_, i) => ({ day: `${i + 1}`, amount: elapsedDaily[i] }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis dataKey="day" tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `₹${(v / 1000).toFixed(0)}k`} width={52} />
+                <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: any) => moneyShort(v as number)} width={56} />
                 <Tooltip contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12 }} formatter={(v: any) => [money(v as number), 'Spent']} />
                 <Bar dataKey="amount" radius={[6, 6, 6, 6]} fill="#c9ff4a" />
                 {/* mean line via reference? use Line */}
@@ -372,7 +383,7 @@ export default function AnalyticsPage() {
           </div>
           <div style={{ marginTop: '0.9rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.74rem', color: 'var(--paper-faint)' }}>Daily amounts (elapsed):</span>
-            <span style={{ fontSize: '0.78rem', color: 'var(--paper)' }}>{elapsedDaily.map((v) => `₹${(v / 1000).toFixed(v ? 1 : 0)}k`).join(' · ')}</span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--paper)' }}>{elapsedDaily.map((v) => moneyShort(v)).join(' · ')}</span>
           </div>
         </article>
 
@@ -403,7 +414,7 @@ export default function AnalyticsPage() {
                       fontSize: '0.82rem',
                     }}
                   >
-                    {w.amount ? `₹${(w.amount / 1000).toFixed(0)}k` : '—'}
+                    {w.amount ? moneyShort(w.amount) : '—'}
                   </div>
                   <div style={{ marginTop: '0.35rem', fontSize: '0.72rem', color: 'var(--paper-faint)', fontWeight: 600 }}>{w.label}</div>
                   <div style={{ fontSize: '0.68rem', color: 'var(--paper-dim)' }}>{w.count} tx</div>
@@ -445,7 +456,7 @@ export default function AnalyticsPage() {
                 <ScatterChart>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                   <XAxis type="number" dataKey="day" domain={[1, daysInMonth]} tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `₹${(v / 1000).toFixed(0)}k`} width={52} />
+                  <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: any) => moneyShort(v as number)} width={56} />
                   <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12 }} formatter={(v: any) => [money(v as number), 'Fun']} />
                   <Scatter data={funPoints} fill="#fbbf24" />
                 </ScatterChart>
@@ -491,7 +502,7 @@ export default function AnalyticsPage() {
               <LineChart data={Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1, actual: i < elapsed ? cumulative[i] : null, regress: Math.round(regression.predict(i + 1)) }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                 <XAxis dataKey="day" tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `₹${(v / 1000).toFixed(0)}k`} width={52} />
+                <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: any) => moneyShort(v as number)} width={56} />
                 <Tooltip contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12 }} formatter={(v: any) => [money(v as number), '']} />
                 <Line type="monotone" dataKey="actual" stroke="#c9ff4a" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="regress" stroke="rgba(255,255,255,0.35)" strokeWidth={1.6} strokeDasharray="6 6" dot={false} />

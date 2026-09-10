@@ -35,7 +35,7 @@ function LoginForm() {
       if (!res.ok || !j.ok) throw new Error(j.error || (mode === 'signup' ? 'Could not create account' : 'Invalid credentials'));
       try {
         localStorage.setItem('mt_ok', '1');
-        // clear any stale per-user cache so new account starts clean (0/0)
+        // remember who signed up; a same-username device cache merges back on next load (never wiped)
         if (mode === 'signup') localStorage.setItem('mt_last_user', (j.user ?? userId).toLowerCase());
       } catch {}
       if (mode === 'signup') setOkMsg(`Welcome, ${j.user ?? userId}! Your vault starts at ₹0 — entering…`);

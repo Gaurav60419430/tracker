@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { billsDueInMonth, billsTotal, detectRecurringBills } from '@/lib/recurring';
 import { StatementImport, type StatementImportResult } from '@/components/StatementImport';
+import { mergeLedgers } from '@/lib/ledger-merge';
 import {
   Area,
   AreaChart,
@@ -86,6 +87,15 @@ const demoTransactions: Transaction[] = [
 const emptyMonth = (): MonthData => ({ salary: 0, budget: 50000, savingsGoal: 20000, transactions: [] });
 const money = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 const moneyCompact = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', notation: 'compact', maximumFractionDigits: 1 }).format(value);
+// Short Indian units for chart axes: K (thousand) → L (lakh) → Cr (crore).
+const moneyShort = (value: number) => {
+  const abs = Math.abs(value);
+  const trim = (n: number) => String(Math.round(n * 10) / 10);
+  if (abs >= 10000000) return `₹${trim(value / 10000000)} Cr`;
+  if (abs >= 100000) return `₹${trim(value / 100000)} L`;
+  if (abs >= 1000) return `₹${trim(value / 1000)}K`;
+  return money(Math.round(value));
+};
 const monthLabel = (key: string) => new Date(`${key}-01T12:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 const shiftMonth = (key: string, delta: number) => {
   const d = new Date(`${key}-01T12:00:00`);
@@ -165,16 +175,21 @@ export default function Home() {
       } catch {}
 
       if (cancelled) return;
+      // Union-merge server + device cache: the transaction set only grows, so a
+      // fresh/empty {} row (DB reset, re-signup with the same User ID) can never
+      // wipe this device's records — and an empty cache can never wipe the server.
+      // The merged result is persisted by the sync effect below (heals both sides).
+      const merged = mergeLedgers(serverLedger ?? undefined, localLedger ?? undefined);
       if (serverLedger !== undefined && serverLedger !== null) {
-        // Authenticated server truth wins — even {} for brand-new accounts (salary 0 / expenses 0)
-        setLedger(serverLedger);
-      } else if (serverLedger === null) {
-        // unauthenticated — middleware/client guard will redirect; keep local to avoid flash
-        if (localLedger && Object.keys(localLedger).length) setLedger(localLedger);
+        // Authenticated — merged union ({} for brand-new accounts stays 0/0 when cache is also empty)
+        if (Object.keys(merged).length) setLedger(merged);
+        else setLedger(serverLedger);
+      } else if (localLedger && Object.keys(localLedger).length) {
+        // unauthenticated / DB unreachable — keep per-user cache to avoid flash
+        setLedger(merged);
       } else {
-        // DB unreachable — fallback to per-user cache
-        if (localLedger && Object.keys(localLedger).length) setLedger(localLedger);
-        else if (localMonth !== initialMonth) setLedger((c) => ({ ...c, [localMonth]: emptyMonth() }));
+        // DB unreachable with no cache
+        if (localMonth !== initialMonth) setLedger((c) => ({ ...c, [localMonth]: emptyMonth() }));
       }
 
       setTodayKey(localKey);
@@ -878,7 +893,7 @@ export default function Home() {
                 <BarChart data={dailySpendData} barCategoryGap="22%">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                   <XAxis dataKey="day" tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} interval={Math.ceil(daysInMonth / 12)} />
-                  <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `₹${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`} width={52} />
+                  <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => moneyShort(v)} width={56} />
                   <Tooltip
                     cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                     contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: '#f0efe8' }}
@@ -918,7 +933,7 @@ export default function Home() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                   <XAxis dataKey="day" tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `₹${(v / 1000).toFixed(0)}k`} width={52} />
+                  <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => moneyShort(v)} width={56} />
                   <Tooltip
                     contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: '#f0efe8' }}
                     formatter={(value: any, name: any) => [money(value as number), (name as string) === 'spent' ? 'Spent' : 'Budget']}
@@ -953,7 +968,7 @@ export default function Home() {
                   <BarChart data={monthlyTrend} barGap={8}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                     <XAxis dataKey="month" tick={{ fill: '#a8a7a0', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `₹${(v / 1000).toFixed(0)}k`} width={52} />
+                    <YAxis tick={{ fill: '#7c7b76', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => moneyShort(v)} width={56} />
                     <Tooltip
                       contentStyle={{ background: '#1a1d1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: '#f0efe8' }}
                       formatter={(value: any, name: any) => [money(value as number), (name as string) === 'spent' ? 'Spent' : (name as string) === 'salary' ? 'Salary' : 'Saved']}
